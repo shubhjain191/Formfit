@@ -11,8 +11,9 @@ Transform your workout experience with FormFit AI - a revolutionary application 
 - **Exercise Recognition**: Automatic identification of different exercises
 - **Virtual Form Coach**: Chat with our AI assistant for technique guidance
 
-![image](https://github.com/user-attachments/assets/c0906742-fab9-4b5d-806c-58245f4cd7fe)
-![image](https://github.com/user-attachments/assets/f393b541-dd63-4cd2-a6a3-44ea5660b99b)
+![image](https://github.com/user-attachments/assets/cce595bf-3968-4f10-af3b-54bd5217c355)
+![image](https://github.com/user-attachments/assets/bb318374-dc5b-4c62-8f1e-66c8ba07dafb)
+
 
 ## 🚀 Quick Start
 
