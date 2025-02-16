@@ -401,105 +401,173 @@ class Exercise:
     # Add feedback parameters and thresholds
 EXERCISE_FEEDBACK = {
     'push_up': {
-        'arm_angle': {'min': 70, 'max': 110, 'message': "Keep your arms at 90 degrees at the bottom"},
-        'back_straight': {'min': 160, 'max': 180, 'message': "Maintain a straight back"},
-        'elbow_position': {'threshold': 30, 'message': "Keep elbows close to body"},
-        'depth': {'threshold': 0.3, 'message': "Lower your chest more"},
-        'symmetry': {'threshold': 15, 'message': "Balance your form on both sides"},
-        'head_position': {'threshold': 10, 'message': "Keep your head neutral, aligned with spine"},
-        'hand_placement': {'min': 1.0, 'max': 1.5, 'message': "Hands should be shoulder-width apart"},
-        'hip_alignment': {'threshold': 5, 'message': "Keep hips level with shoulders"},
-        'core_engagement': {'threshold': 20, 'message': "Engage your core to prevent sagging"},
-        'tempo': {'up': 2, 'down': 3, 'message': "Control the movement: 2 up, 3 down"},
-        'breathing': {'message': "Exhale pushing up, inhale going down"},
-        'foot_position': {'threshold': 10, 'message': "Keep feet shoulder-width apart"},
-        'scapular_movement': {'threshold': 15, 'message': "Retract shoulder blades at bottom"}
+        'arm_angle': {
+            'min': 70, 'max': 110,
+            'good': "Great arm angle - perfect 90° at the bottom",
+            'bad': "Keep your arms at 90 degrees at the bottom"
+        },
+        'back_straight': {
+            'min': 160, 'max': 180,
+            'good': "Excellent back position - staying straight and strong",
+            'bad': "Maintain a straight back"
+        },
+        'elbow_position': {
+            'threshold': 30,
+            'good': "Perfect elbow position - nice and tight",
+            'bad': "Keep elbows close to body"
+        },
+        'depth': {
+            'threshold': 0.3,
+            'good': "Great depth on those push-ups",
+            'bad': "Lower your chest more"
+        },
+        'symmetry': {
+            'threshold': 15,
+            'good': "Excellent balanced form",
+            'bad': "Balance your form on both sides"
+        },
+        'head_position': {
+            'threshold': 10,
+            'good': "Perfect head alignment",
+            'bad': "Keep your head neutral, aligned with spine"
+        },
+        'hand_placement': {
+            'min': 1.0, 'max': 1.5,
+            'good': "Ideal hand placement",
+            'bad': "Hands should be shoulder-width apart"
+        },
+        'hip_alignment': {
+            'threshold': 5,
+            'good': "Hips perfectly aligned",
+            'bad': "Keep hips level with shoulders"
+        },
+        'core_engagement': {
+            'threshold': 20,
+            'good': "Strong core engagement",
+            'bad': "Engage your core to prevent sagging"
+        }
     },
     'squat': {
-        'knee_angle': {'min': 60, 'max': 100, 'message': "Bend knees to 90 degrees"},
-        'hip_position': {'threshold': 0.4, 'message': "Lower hips more"},
-        'knee_alignment': {'threshold': 20, 'message': "Keep knees aligned with toes"},
-        'back_angle': {'min': 150, 'max': 180, 'message': "Keep your back straight"},
-        'depth': {'threshold': 0.35, 'message': "Go deeper into the squat"},
-        'balance': {'threshold': 0.1, 'message': "Distribute weight evenly"},
-        'ankle_mobility': {'min': 30, 'max': 45, 'message': "Allow ankles to flex naturally"},
-        'hip_hinge': {'threshold': 45, 'message': "Initiate movement with hip hinge"},
-        'foot_stability': {'threshold': 0.05, 'message': "Keep feet firmly planted"},
-        'chest_position': {'min': 45, 'max': 60, 'message': "Keep chest up and proud"},
-        'head_alignment': {'threshold': 10, 'message': "Look straight ahead, neutral neck"},
-        'hip_drive': {'threshold': 0.3, 'message': "Drive through hips when ascending"},
-        'tempo_control': {'up': 1, 'down': 3, 'message': "Control descent, explosive ascent"},
-        'breathing_pattern': {'message': "Breathe in going down, out coming up"},
-        'core_bracing': {'threshold': 15, 'message': "Maintain tight core throughout"}
+        'knee_angle': {
+            'min': 60, 'max': 100,
+            'good': "Perfect knee bend at 90°",
+            'bad': "Bend knees to 90 degrees"
+        },
+        'hip_position': {
+            'threshold': 0.4,
+            'good': "Great squat depth",
+            'bad': "Lower hips more"
+        },
+        'knee_alignment': {
+            'threshold': 20,
+            'good': "Excellent knee tracking",
+            'bad': "Keep knees aligned with toes"
+        },
+        'back_angle': {
+            'min': 150, 'max': 180,
+            'good': "Perfect back position",
+            'bad': "Keep your back straight"
+        },
+        'depth': {
+            'threshold': 0.35,
+            'good': "Hitting full depth - great work",
+            'bad': "Go deeper into the squat"
+        },
+        'balance': {
+            'threshold': 0.1,
+            'good': "Perfectly balanced",
+            'bad': "Distribute weight evenly"
+        }
     },
     'bicep_curl': {
-        'elbow_stability': {'threshold': 15, 'message': "Keep elbows still"},
-        'wrist_rotation': {'threshold': 20, 'message': "Maintain proper wrist position"},
-        'curl_range': {'min': 30, 'max': 160, 'message': "Complete full range of motion"},
-        'shoulder_movement': {'threshold': 10, 'message': "Minimize shoulder swinging"},
-        'symmetry': {'threshold': 15, 'message': "Keep curls even on both sides"},
-        'tempo': {'up': 2, 'down': 3, 'message': "Control the negative portion"},
-        'grip_width': {'threshold': 5, 'message': "Maintain proper grip width"},
-        'forearm_rotation': {'min': 80, 'max': 100, 'message': "Keep forearms supinated"},
-        'core_stability': {'threshold': 10, 'message': "Keep core engaged, back straight"},
-        'elbow_path': {'threshold': 5, 'message': "Keep elbows moving in vertical plane"},
-        'wrist_flexion': {'threshold': 15, 'message': "Avoid excessive wrist flexion"},
-        'shoulder_stability': {'threshold': 8, 'message': "Lock shoulders back and down"},
-        'breathing_rhythm': {'message': "Exhale during curl, inhale lowering"},
-        'hip_position': {'threshold': 5, 'message': "Keep hips still, no swaying"},
-        'peak_contraction': {'threshold': 0.5, 'message': "Squeeze at the top of movement"}
+        'elbow_stability': {
+            'threshold': 15,
+            'good': "Stable elbows - great control",
+            'bad': "Keep elbows still"
+        },
+        'curl_range': {
+            'min': 30, 'max': 160,
+            'good': "Full range of motion - excellent",
+            'bad': "Complete full range of motion"
+        },
+        'shoulder_movement': {
+            'threshold': 10,
+            'good': "Perfect form - no swinging",
+            'bad': "Minimize shoulder swinging"
+        },
+        'symmetry': {
+            'threshold': 15,
+            'good': "Great balanced curls",
+            'bad': "Keep curls even on both sides"
+        }
     },
     'shoulder_press': {
-        'arm_alignment': {'threshold': 15, 'message': "Keep arms aligned with shoulders"},
-        'press_height': {'threshold': 0.8, 'message': "Press all the way up"},
-        'elbow_angle': {'min': 85, 'max': 95, 'message': "Start with 90° elbow angle"},
-        'back_posture': {'min': 170, 'max': 180, 'message': "Maintain straight back"},
-        'symmetry': {'threshold': 10, 'message': "Press evenly on both sides"},
-        'core_engagement': {'threshold': 15, 'message': "Brace core throughout movement"},
-        'shoulder_position': {'threshold': 10, 'message': "Keep shoulders down and back"},
-        'wrist_alignment': {'threshold': 15, 'message': "Keep wrists straight and stable"},
-        'head_position': {'threshold': 5, 'message': "Allow bar to clear face naturally"},
-        'elbow_path': {'threshold': 20, 'message': "Drive elbows forward and up"},
-        'tempo_control': {'up': 1, 'down': 2, 'message': "Control the descent"},
-        'breathing_pattern': {'message': "Exhale on press, inhale on descent"},
-        'lockout_position': {'threshold': 5, 'message': "Achieve full lockout at top"},
-        'starting_position': {'threshold': 10, 'message': "Start with proper rack position"},
-        'hip_stability': {'threshold': 8, 'message': "Maintain stable hip position"}
+        'arm_alignment': {
+            'threshold': 15,
+            'good': "Perfect arm alignment",
+            'bad': "Keep arms aligned with shoulders"
+        },
+        'press_height': {
+            'threshold': 0.8,
+            'good': "Full extension - great work",
+            'bad': "Press all the way up"
+        },
+        'elbow_angle': {
+            'min': 85, 'max': 95,
+            'good': "Perfect starting position",
+            'bad': "Start with 90° elbow angle"
+        },
+        'back_posture': {
+            'min': 170, 'max': 180,
+            'good': "Excellent posture",
+            'bad': "Maintain straight back"
+        }
     }
 }
 
 def generate_feedback(detector, img, landmark_list, exercise_type):
-    feedback_messages = []
+    feedback = {
+        'positive': [],
+        'negative': []
+    }
     
     if exercise_type == 'push_up':
         # Check arm angle
         right_arm_angle = detector.find_angle(img, 12, 14, 16)
         left_arm_angle = detector.find_angle(img, 11, 13, 15)
         
-        if not (EXERCISE_FEEDBACK['push_up']['arm_angle']['min'] <= right_arm_angle <= EXERCISE_FEEDBACK['push_up']['arm_angle']['max']):
-            feedback_messages.append(EXERCISE_FEEDBACK['push_up']['arm_angle']['message'])
+        if (EXERCISE_FEEDBACK['push_up']['arm_angle']['min'] <= right_arm_angle <= EXERCISE_FEEDBACK['push_up']['arm_angle']['max']):
+            feedback['positive'].append(EXERCISE_FEEDBACK['push_up']['arm_angle']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['push_up']['arm_angle']['bad'])
             
         # Check back alignment
         shoulders = np.array([landmark_list[11][1:], landmark_list[12][1:]])
         hips = np.array([landmark_list[23][1:], landmark_list[24][1:]])
         back_angle = calculate_angle(shoulders[0], hips[0], hips[1])
         
-        if back_angle < EXERCISE_FEEDBACK['push_up']['back_straight']['min']:
-            feedback_messages.append(EXERCISE_FEEDBACK['push_up']['back_straight']['message'])
+        if back_angle >= EXERCISE_FEEDBACK['push_up']['back_straight']['min']:
+            feedback['positive'].append(EXERCISE_FEEDBACK['push_up']['back_straight']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['push_up']['back_straight']['bad'])
             
     elif exercise_type == 'squat':
         # Check knee angle
         right_knee_angle = detector.find_angle(img, 24, 26, 28)
         left_knee_angle = detector.find_angle(img, 23, 25, 27)
         
-        if not (EXERCISE_FEEDBACK['squat']['knee_angle']['min'] <= right_knee_angle <= EXERCISE_FEEDBACK['squat']['knee_angle']['max']):
-            feedback_messages.append(EXERCISE_FEEDBACK['squat']['knee_angle']['message'])
+        if (EXERCISE_FEEDBACK['squat']['knee_angle']['min'] <= right_knee_angle <= EXERCISE_FEEDBACK['squat']['knee_angle']['max']):
+            feedback['positive'].append(EXERCISE_FEEDBACK['squat']['knee_angle']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['squat']['knee_angle']['bad'])
             
         # Check hip depth
         hip_y = (landmark_list[23][2] + landmark_list[24][2]) / 2
         knee_y = (landmark_list[25][2] + landmark_list[26][2]) / 2
-        if abs(hip_y - knee_y) < EXERCISE_FEEDBACK['squat']['hip_position']['threshold']:
-            feedback_messages.append(EXERCISE_FEEDBACK['squat']['hip_position']['message'])
+        if abs(hip_y - knee_y) >= EXERCISE_FEEDBACK['squat']['hip_position']['threshold']:
+            feedback['positive'].append(EXERCISE_FEEDBACK['squat']['hip_position']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['squat']['hip_position']['bad'])
             
     elif exercise_type == 'bicep_curl':
         # Check elbow stability
@@ -507,13 +575,17 @@ def generate_feedback(detector, img, landmark_list, exercise_type):
         right_elbow = np.array(landmark_list[14][1:])
         movement = np.linalg.norm(right_shoulder - right_elbow)
         
-        if movement > EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['threshold']:
-            feedback_messages.append(EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['message'])
+        if movement <= EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['threshold']:
+            feedback['positive'].append(EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['bad'])
             
         # Check range of motion
         right_arm_angle = detector.find_angle(img, 12, 14, 16)
-        if not (EXERCISE_FEEDBACK['bicep_curl']['curl_range']['min'] <= right_arm_angle <= EXERCISE_FEEDBACK['bicep_curl']['curl_range']['max']):
-            feedback_messages.append(EXERCISE_FEEDBACK['bicep_curl']['curl_range']['message'])
+        if (EXERCISE_FEEDBACK['bicep_curl']['curl_range']['min'] <= right_arm_angle <= EXERCISE_FEEDBACK['bicep_curl']['curl_range']['max']):
+            feedback['positive'].append(EXERCISE_FEEDBACK['bicep_curl']['curl_range']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['bicep_curl']['curl_range']['bad'])
             
     elif exercise_type == 'shoulder_press':
         # Check arm alignment
@@ -521,22 +593,33 @@ def generate_feedback(detector, img, landmark_list, exercise_type):
         right_wrist = np.array(landmark_list[16][1:])
         alignment = np.linalg.norm(right_shoulder - right_wrist)
         
-        if alignment > EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['threshold']:
-            feedback_messages.append(EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['message'])
+        if alignment <= EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['threshold']:
+            feedback['positive'].append(EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['bad'])
             
         # Check back posture
         back_angle = detector.find_angle(img, 11, 23, 25)
-        if not (EXERCISE_FEEDBACK['shoulder_press']['back_posture']['min'] <= back_angle <= EXERCISE_FEEDBACK['shoulder_press']['back_posture']['max']):
-            feedback_messages.append(EXERCISE_FEEDBACK['shoulder_press']['back_posture']['message'])
+        if (EXERCISE_FEEDBACK['shoulder_press']['back_posture']['min'] <= back_angle <= EXERCISE_FEEDBACK['shoulder_press']['back_posture']['max']):
+            feedback['positive'].append(EXERCISE_FEEDBACK['shoulder_press']['back_posture']['good'])
+        else:
+            feedback['negative'].append(EXERCISE_FEEDBACK['shoulder_press']['back_posture']['bad'])
     
-    return feedback_messages
+    return feedback
 
 def display_feedback(img, feedback_messages):
-    # Display feedback messages in the bottom right corner
+    # Display feedback messages in bottom right corner
     height, width = img.shape[:2]
     y_offset = height - 30
     
-    for message in feedback_messages[-3:]:  # Show last 3 messages only
+    # Combine positive and negative feedback
+    all_messages = []
+    if isinstance(feedback_messages, dict):
+        all_messages.extend(feedback_messages.get('positive', []))
+        all_messages.extend(feedback_messages.get('negative', []))
+    
+    # Show only last 3 messages
+    for message in all_messages[-3:]:
         text_size = cv2.getTextSize(message, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
         draw_styled_text(img, message, (width - text_size[0] - 10, y_offset), 
                         font_scale=0.6, 
