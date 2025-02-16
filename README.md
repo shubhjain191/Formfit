@@ -9,7 +9,7 @@ Transform your workout experience with FormFit AI - a revolutionary application 
 - **Virtual Form Coach**: Chat with our AI assistant for technique guidance
 
 
-![image](https://github.com/user-attachments/assets/dcd746aa-510a-4a34-914d-36574c99d91e)
+![image](https://github.com/user-attachments/assets/ad513e77-4771-4b10-a16a-b6f34d7c6700)
 ![image](https://github.com/user-attachments/assets/574a6d81-39cb-4c7e-9367-dfc5ab36bb11)
 
 
