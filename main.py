@@ -9,7 +9,21 @@ def main():
     st.set_page_config(page_title='Formfit', layout='centered')
     
     # Define App Title and Structure
-    st.title('Formfit: Fitness AI Coach 💪')
+    st.title('Formfit: Your Intelligent Form-Tracking Companion 💪')
+    
+    st.markdown("""
+    Transform your workout experience with FormFit AI - a revolutionary application that combines 
+    advanced pose estimation and machine learning to be your personal form-perfecting companion.
+    """)
+
+    # Key Features Section
+    st.markdown("""
+    ✨ **Key Features**
+    - 🤖 AI Form Analysis: Real-time feedback on exercise technique
+    - 📊 Smart Rep Counter: Precision repetition tracking
+    - 💬 Virtual Form Coach: Chat with our AI assistant
+    - 🎯 Exercise Recognition: Automatic exercise identification
+    """)
 
     # 2 Options: Chatbot, Auto Classify
     options = st.sidebar.selectbox(
@@ -39,7 +53,14 @@ def main():
 
     # Footer or additional info
     st.markdown('---')
-    st.markdown('Made with ❤️ by Formfit Team')
+    st.markdown("""
+    Made with ❤️ by Formfit Team
+    
+    **Core Components:**
+    - Intelligent Form Analysis using BiLSTM model
+    - Advanced Rep Validation with form quality checks
+    - AI Form Assistant for technique guidance
+    """)
 
 if __name__ == '__main__':
     def load_css():
