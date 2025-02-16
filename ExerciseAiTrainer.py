@@ -1,4 +1,3 @@
-
 import cv2
 import PoseModule2 as pm
 import numpy as np
@@ -154,6 +153,8 @@ class Exercise:
             print(f"Error loading label encoder: {e}")
             self.label_encoder = None
             self.exercise_classes = []
+            self.feedback_messages = []
+            self.stop_requested = False
 
     def extract_features(self, landmarks):
         features = []
@@ -239,7 +240,18 @@ class Exercise:
 
     # Auto classify and count method with repetition counting logic
     def auto_classify_and_count(self):
-        stframe = st.empty()
+        # Create persistent containers for the interface
+        header = st.container()
+        video_container = st.container()
+        summary_container = st.container()
+
+        with header:
+            col1, col2 = st.columns([4, 1])
+            with col2:
+                stop_button = st.button('Stop Exercise', key='stop_button')
+
+        stframe = video_container.empty()
+        
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             print("Error opening webcam.")
@@ -257,7 +269,18 @@ class Exercise:
         detector = pm.posture_detector()
         pose = mp.solutions.pose.Pose()
 
-        while True:
+        exercise_name_map = {
+            'push_up': 'Push-up',
+            'squat': 'Squat',
+            'bicep_curl': 'Curl',
+            'shoulder_press': 'Press'
+        }
+
+        while cap.isOpened():
+            # Check if stop button was clicked
+            if stop_button:
+                break
+
             ret, frame = cap.read()
             if not ret:
                 print("Error reading frame.")
@@ -298,27 +321,24 @@ class Exercise:
             detector.find_person(frame, draw=True)  # Ensuring landmarks are drawn on the frame
             landmark_list = detector.find_landmarks(frame, draw=True)  # Change draw=False to draw=True
             if len(landmark_list) > 0:
-                if self.are_hands_joined(landmark_list, stop=True):
-                    break  # Stop if hands are joined
-
+                exercise_type = None
                 if current_prediction == 'push-up':
+                    exercise_type = 'push_up'
                     stages['push_up'], counters['push_up'] = count_repetition_push_up(detector, frame, landmark_list, stages['push_up'], counters['push_up'], self)
-
                 elif current_prediction == 'squat':
+                    exercise_type = 'squat'
                     stages['squat'], counters['squat'] = count_repetition_squat(detector, frame, landmark_list, stages['squat'], counters['squat'], self)
-
                 elif current_prediction == 'barbell biceps curl':
+                    exercise_type = 'bicep_curl'
                     stages['right_bicep_curl'], stages['left_bicep_curl'], counters['bicep_curl'] = count_repetition_bicep_curl(detector, frame, landmark_list, stages['right_bicep_curl'], stages['left_bicep_curl'], counters['bicep_curl'], self)
-
                 elif current_prediction == 'shoulder press':
+                    exercise_type = 'shoulder_press'
                     stages['shoulder_press'], counters['shoulder_press'] = count_repetition_shoulder_press(detector, frame, landmark_list, stages['shoulder_press'], counters['shoulder_press'], self)
-            
-            exercise_name_map = {
-                'push_up': 'Push-up',
-                'squat': 'Squat',
-                'bicep_curl': 'Curl',
-                'shoulder_press': 'Press'
-            }
+
+                 # Generate and display feedback if we have a valid exercise type
+                if exercise_type:
+                    self.feedback_messages = generate_feedback(detector, frame, landmark_list, exercise_type)
+                    display_feedback(frame, self.feedback_messages)
 
             # Calculate the spacing for exercise repetitions display
             height, width, _ = frame.shape
@@ -326,8 +346,8 @@ class Exercise:
             vertical_spacing = height // (num_exercises + 1)
 
             # Draw black rectangles on the left and top side
-            cv2.rectangle(frame, (0, 0), (120, height), (0, 0, 0), -1)
-            cv2.rectangle(frame, (0, 0), (width, 30), (0, 0, 0), -1)
+            cv2.rectangle(frame, (0, 0), (0, height), (0, 0, 0), -1)
+            cv2.rectangle(frame, (0, 0), (width, 0), (0, 0, 0), -1)
 
             # Display the frame with predicted exercise and repetition count
             short_name = exercise_name_map.get(current_prediction, current_prediction)
@@ -345,6 +365,224 @@ class Exercise:
 
         cap.release()
         cv2.destroyAllWindows()
+
+        # Clear the video container
+        video_container.empty()
+        
+        # Display final summary in the persistent summary container
+        with summary_container:
+            st.success("Exercise session completed!")
+            st.write("### Exercise Summary")
+            
+            # Create a more visually appealing summary
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("#### Repetitions")
+                for exercise, count in counters.items():
+                    if count > 0:
+                        st.metric(
+                            label=exercise_name_map.get(exercise, exercise),
+                            value=f"{count} reps"
+                        )
+            
+            with col2:
+                st.write("#### Form Feedback")
+                if self.feedback_messages:
+                    for msg in self.feedback_messages:
+                        st.info(msg)
+                else:
+                    st.success("Great form! Keep it up!")
+            
+            # Add a restart button
+            if st.button("Start New Session", key="restart_button"):
+                st.experimental_rerun()
+                
+    # Add feedback parameters and thresholds
+EXERCISE_FEEDBACK = {
+    'push_up': {
+        'arm_angle': {'min': 70, 'max': 110, 'message': "Keep your arms at 90 degrees at the bottom"},
+        'back_straight': {'min': 160, 'max': 180, 'message': "Maintain a straight back"},
+        'elbow_position': {'threshold': 30, 'message': "Keep elbows close to body"},
+        'depth': {'threshold': 0.3, 'message': "Lower your chest more"},
+        'symmetry': {'threshold': 15, 'message': "Balance your form on both sides"},
+        'head_position': {'threshold': 10, 'message': "Keep your head neutral, aligned with spine"},
+        'hand_placement': {'min': 1.0, 'max': 1.5, 'message': "Hands should be shoulder-width apart"},
+        'hip_alignment': {'threshold': 5, 'message': "Keep hips level with shoulders"},
+        'core_engagement': {'threshold': 20, 'message': "Engage your core to prevent sagging"},
+        'tempo': {'up': 2, 'down': 3, 'message': "Control the movement: 2 up, 3 down"},
+        'breathing': {'message': "Exhale pushing up, inhale going down"},
+        'foot_position': {'threshold': 10, 'message': "Keep feet shoulder-width apart"},
+        'scapular_movement': {'threshold': 15, 'message': "Retract shoulder blades at bottom"}
+    },
+    'squat': {
+        'knee_angle': {'min': 60, 'max': 100, 'message': "Bend knees to 90 degrees"},
+        'hip_position': {'threshold': 0.4, 'message': "Lower hips more"},
+        'knee_alignment': {'threshold': 20, 'message': "Keep knees aligned with toes"},
+        'back_angle': {'min': 150, 'max': 180, 'message': "Keep your back straight"},
+        'depth': {'threshold': 0.35, 'message': "Go deeper into the squat"},
+        'balance': {'threshold': 0.1, 'message': "Distribute weight evenly"},
+        'ankle_mobility': {'min': 30, 'max': 45, 'message': "Allow ankles to flex naturally"},
+        'hip_hinge': {'threshold': 45, 'message': "Initiate movement with hip hinge"},
+        'foot_stability': {'threshold': 0.05, 'message': "Keep feet firmly planted"},
+        'chest_position': {'min': 45, 'max': 60, 'message': "Keep chest up and proud"},
+        'head_alignment': {'threshold': 10, 'message': "Look straight ahead, neutral neck"},
+        'hip_drive': {'threshold': 0.3, 'message': "Drive through hips when ascending"},
+        'tempo_control': {'up': 1, 'down': 3, 'message': "Control descent, explosive ascent"},
+        'breathing_pattern': {'message': "Breathe in going down, out coming up"},
+        'core_bracing': {'threshold': 15, 'message': "Maintain tight core throughout"}
+    },
+    'bicep_curl': {
+        'elbow_stability': {'threshold': 15, 'message': "Keep elbows still"},
+        'wrist_rotation': {'threshold': 20, 'message': "Maintain proper wrist position"},
+        'curl_range': {'min': 30, 'max': 160, 'message': "Complete full range of motion"},
+        'shoulder_movement': {'threshold': 10, 'message': "Minimize shoulder swinging"},
+        'symmetry': {'threshold': 15, 'message': "Keep curls even on both sides"},
+        'tempo': {'up': 2, 'down': 3, 'message': "Control the negative portion"},
+        'grip_width': {'threshold': 5, 'message': "Maintain proper grip width"},
+        'forearm_rotation': {'min': 80, 'max': 100, 'message': "Keep forearms supinated"},
+        'core_stability': {'threshold': 10, 'message': "Keep core engaged, back straight"},
+        'elbow_path': {'threshold': 5, 'message': "Keep elbows moving in vertical plane"},
+        'wrist_flexion': {'threshold': 15, 'message': "Avoid excessive wrist flexion"},
+        'shoulder_stability': {'threshold': 8, 'message': "Lock shoulders back and down"},
+        'breathing_rhythm': {'message': "Exhale during curl, inhale lowering"},
+        'hip_position': {'threshold': 5, 'message': "Keep hips still, no swaying"},
+        'peak_contraction': {'threshold': 0.5, 'message': "Squeeze at the top of movement"}
+    },
+    'shoulder_press': {
+        'arm_alignment': {'threshold': 15, 'message': "Keep arms aligned with shoulders"},
+        'press_height': {'threshold': 0.8, 'message': "Press all the way up"},
+        'elbow_angle': {'min': 85, 'max': 95, 'message': "Start with 90° elbow angle"},
+        'back_posture': {'min': 170, 'max': 180, 'message': "Maintain straight back"},
+        'symmetry': {'threshold': 10, 'message': "Press evenly on both sides"},
+        'core_engagement': {'threshold': 15, 'message': "Brace core throughout movement"},
+        'shoulder_position': {'threshold': 10, 'message': "Keep shoulders down and back"},
+        'wrist_alignment': {'threshold': 15, 'message': "Keep wrists straight and stable"},
+        'head_position': {'threshold': 5, 'message': "Allow bar to clear face naturally"},
+        'elbow_path': {'threshold': 20, 'message': "Drive elbows forward and up"},
+        'tempo_control': {'up': 1, 'down': 2, 'message': "Control the descent"},
+        'breathing_pattern': {'message': "Exhale on press, inhale on descent"},
+        'lockout_position': {'threshold': 5, 'message': "Achieve full lockout at top"},
+        'starting_position': {'threshold': 10, 'message': "Start with proper rack position"},
+        'hip_stability': {'threshold': 8, 'message': "Maintain stable hip position"}
+    }
+}
+
+def generate_feedback(detector, img, landmark_list, exercise_type):
+    feedback_messages = []
+    
+    if exercise_type == 'push_up':
+        # Check arm angle
+        right_arm_angle = detector.find_angle(img, 12, 14, 16)
+        left_arm_angle = detector.find_angle(img, 11, 13, 15)
+        
+        if not (EXERCISE_FEEDBACK['push_up']['arm_angle']['min'] <= right_arm_angle <= EXERCISE_FEEDBACK['push_up']['arm_angle']['max']):
+            feedback_messages.append(EXERCISE_FEEDBACK['push_up']['arm_angle']['message'])
+            
+        # Check back alignment
+        shoulders = np.array([landmark_list[11][1:], landmark_list[12][1:]])
+        hips = np.array([landmark_list[23][1:], landmark_list[24][1:]])
+        back_angle = calculate_angle(shoulders[0], hips[0], hips[1])
+        
+        if back_angle < EXERCISE_FEEDBACK['push_up']['back_straight']['min']:
+            feedback_messages.append(EXERCISE_FEEDBACK['push_up']['back_straight']['message'])
+            
+    elif exercise_type == 'squat':
+        # Check knee angle
+        right_knee_angle = detector.find_angle(img, 24, 26, 28)
+        left_knee_angle = detector.find_angle(img, 23, 25, 27)
+        
+        if not (EXERCISE_FEEDBACK['squat']['knee_angle']['min'] <= right_knee_angle <= EXERCISE_FEEDBACK['squat']['knee_angle']['max']):
+            feedback_messages.append(EXERCISE_FEEDBACK['squat']['knee_angle']['message'])
+            
+        # Check hip depth
+        hip_y = (landmark_list[23][2] + landmark_list[24][2]) / 2
+        knee_y = (landmark_list[25][2] + landmark_list[26][2]) / 2
+        if abs(hip_y - knee_y) < EXERCISE_FEEDBACK['squat']['hip_position']['threshold']:
+            feedback_messages.append(EXERCISE_FEEDBACK['squat']['hip_position']['message'])
+            
+    elif exercise_type == 'bicep_curl':
+        # Check elbow stability
+        right_shoulder = np.array(landmark_list[12][1:])
+        right_elbow = np.array(landmark_list[14][1:])
+        movement = np.linalg.norm(right_shoulder - right_elbow)
+        
+        if movement > EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['threshold']:
+            feedback_messages.append(EXERCISE_FEEDBACK['bicep_curl']['elbow_stability']['message'])
+            
+        # Check range of motion
+        right_arm_angle = detector.find_angle(img, 12, 14, 16)
+        if not (EXERCISE_FEEDBACK['bicep_curl']['curl_range']['min'] <= right_arm_angle <= EXERCISE_FEEDBACK['bicep_curl']['curl_range']['max']):
+            feedback_messages.append(EXERCISE_FEEDBACK['bicep_curl']['curl_range']['message'])
+            
+    elif exercise_type == 'shoulder_press':
+        # Check arm alignment
+        right_shoulder = np.array(landmark_list[12][1:])
+        right_wrist = np.array(landmark_list[16][1:])
+        alignment = np.linalg.norm(right_shoulder - right_wrist)
+        
+        if alignment > EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['threshold']:
+            feedback_messages.append(EXERCISE_FEEDBACK['shoulder_press']['arm_alignment']['message'])
+            
+        # Check back posture
+        back_angle = detector.find_angle(img, 11, 23, 25)
+        if not (EXERCISE_FEEDBACK['shoulder_press']['back_posture']['min'] <= back_angle <= EXERCISE_FEEDBACK['shoulder_press']['back_posture']['max']):
+            feedback_messages.append(EXERCISE_FEEDBACK['shoulder_press']['back_posture']['message'])
+    
+    return feedback_messages
+
+def display_feedback(img, feedback_messages):
+    # Display feedback messages in the bottom right corner
+    height, width = img.shape[:2]
+    y_offset = height - 30
+    
+    for message in feedback_messages[-3:]:  # Show last 3 messages only
+        text_size = cv2.getTextSize(message, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+        draw_styled_text(img, message, (width - text_size[0] - 10, y_offset), 
+                        font_scale=0.6, 
+                        bg_color=(200, 50, 50))
+        y_offset -= 30
+
+# Update the exercise_method function to include feedback
+def exercise_method(self, cap, is_video, count_repetition_function, multi_stage=False, counter=0, stage=None, stage_right=None, stage_left=None):
+    # ... (previous code remains the same until inside the while loop)
+    
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        img = detector.find_person(frame)
+        landmark_list = detector.find_landmarks(img, draw=False)
+
+        if len(landmark_list) != 0:
+            # Generate and display feedback
+            exercise_type = None
+            if count_repetition_function == count_repetition_push_up:
+                exercise_type = 'push_up'
+            elif count_repetition_function == count_repetition_squat:
+                exercise_type = 'squat'
+            elif count_repetition_function == count_repetition_bicep_curl:
+                exercise_type = 'bicep_curl'
+            elif count_repetition_function == count_repetition_shoulder_press:
+                exercise_type = 'shoulder_press'
+
+            feedback_messages = generate_feedback(detector, img, landmark_list, exercise_type)
+            display_feedback(img, feedback_messages)
+
+            if multi_stage:
+                stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
+            else:
+                stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
+
+            if self.are_hands_joined(landmark_list, stop=False, is_video=is_video):
+                break
+
+        self.repetitions_counter(img, counter)
+        stframe.image(img, channels='BGR', use_container_width=True)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
     
     # Check if hands are joined together in a 'prayer' gesture
     def are_hands_joined(self, landmark_list, stop, is_video=False):
@@ -399,94 +637,111 @@ class Exercise:
     # Generic exercise method
     # Generic exercise method
     # Generic exercise method
-    def exercise_method(self, cap, is_video, count_repetition_function, multi_stage=False, counter=0, stage=None, stage_right=None, stage_left=None):
-        if is_video:
-            stframe = st.empty()
-            detector = pm.posture_detector()
+    # Previous code remains the same until exercise_method function
 
-            # Get the original video's FPS
-            original_fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_time = 1 / original_fps
+def exercise_method(self, cap, is_video, count_repetition_function, multi_stage=False, counter=0, stage=None, stage_right=None, stage_left=None):
+    if is_video:
+        stframe = st.empty()
+        detector = pm.posture_detector()
+        original_fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_time = 1 / original_fps
+        frame_count = 0
+        start_time = time.time()
+        last_update_time = start_time
+        update_interval = 0.1
 
-            frame_count = 0
-            start_time = time.time()
-            last_update_time = start_time
+        while cap.isOpened():
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            target_frame = int(elapsed_time * original_fps)
 
-            update_interval = 0.1  # Update display every 100ms
-
-            while cap.isOpened():
-                current_time = time.time()
-                elapsed_time = current_time - start_time
-
-                # Determine how many frames should have been processed by now
-                target_frame = int(elapsed_time * original_fps)
-
-                # Process frames until we catch up to where we should be
-                while frame_count < target_frame:
-                    ret, frame = cap.read()
-                    if not ret:
-                        print("End of video.")
-                        return
-
-                    frame_count += 1
-
-                    # Process the last frame we read
-                    if frame_count == target_frame:
-                        img = detector.find_person(frame)
-                        landmark_list = detector.find_landmarks(img, draw=False)
-
-                        if len(landmark_list) != 0:
-                            if multi_stage:
-                                stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
-                            else:
-                                stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
-
-                            if self.are_hands_joined(landmark_list, stop=False, is_video=is_video):
-                                return
-
-                        self.repetitions_counter(img, counter)
-
-                # Update display at regular intervals
-                if current_time - last_update_time >= update_interval:
-                    stframe.image(img, channels='BGR', use_container_width=True)
-                    last_update_time = current_time
-
-                # Small sleep to prevent busy-waiting
-                time.sleep(0.001)
-
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-
-            cap.release()
-            cv2.destroyAllWindows()
-        else:
-            # Original webcam exercise code
-            stframe = st.empty()
-            cap = cv2.VideoCapture(0)
-            detector = pm.posture_detector()
-
-            while cap.isOpened():
+            while frame_count < target_frame:
                 ret, frame = cap.read()
                 if not ret:
+                    return
+
+                frame_count += 1
+
+                if frame_count == target_frame:
+                    img = detector.find_person(frame)
+                    landmark_list = detector.find_landmarks(img, draw=False)
+
+                    if len(landmark_list) != 0:
+                        # Determine exercise type
+                        exercise_type = None
+                        if count_repetition_function.__name__ == 'count_repetition_push_up':
+                            exercise_type = 'push_up'
+                        elif count_repetition_function.__name__ == 'count_repetition_squat':
+                            exercise_type = 'squat'
+                        elif count_repetition_function.__name__ == 'count_repetition_bicep_curl':
+                            exercise_type = 'bicep_curl'
+                        elif count_repetition_function.__name__ == 'count_repetition_shoulder_press':
+                            exercise_type = 'shoulder_press'
+
+                        # Generate and display feedback
+                        if exercise_type:
+                            feedback_messages = generate_feedback(detector, img, landmark_list, exercise_type)
+                            display_feedback(img, feedback_messages)
+
+                        if multi_stage:
+                            stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
+                        else:
+                            stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
+
+                    self.repetitions_counter(img, counter)
+
+            if current_time - last_update_time >= update_interval:
+                stframe.image(img, channels='BGR', use_container_width=True)
+                last_update_time = current_time
+
+            time.sleep(0.001)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    else:
+        stframe = st.empty()
+        cap = cv2.VideoCapture(0)
+        detector = pm.posture_detector()
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            img = detector.find_person(frame)
+            landmark_list = detector.find_landmarks(img, draw=False)
+
+            if len(landmark_list) != 0:
+                # Determine exercise type
+                exercise_type = None
+                if count_repetition_function.__name__ == 'count_repetition_push_up':
+                    exercise_type = 'push_up'
+                elif count_repetition_function.__name__ == 'count_repetition_squat':
+                    exercise_type = 'squat'
+                elif count_repetition_function.__name__ == 'count_repetition_bicep_curl':
+                    exercise_type = 'bicep_curl'
+                elif count_repetition_function.__name__ == 'count_repetition_shoulder_press':
+                    exercise_type = 'shoulder_press'
+
+                # Generate and display feedback
+                if exercise_type:
+                    feedback_messages = generate_feedback(detector, img, landmark_list, exercise_type)
+                    display_feedback(img, feedback_messages)
+
+                if multi_stage:
+                    stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
+                else:
+                    stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
+
+                if self.are_hands_joined(landmark_list, stop=False):
                     break
 
-                img = detector.find_person(frame)
-                landmark_list = detector.find_landmarks(img, draw=False)
+            self.repetitions_counter(img, counter)
+            stframe.image(img, channels='BGR', use_container_width=True)
 
-                if len(landmark_list) != 0:
-                    if multi_stage:
-                        stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
-                    else:
-                        stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
-                    if self.are_hands_joined(landmark_list, stop=False):
-                        break
-
-                self.repetitions_counter(img, counter)
-                stframe.image(img, channels='BGR', use_column_width=True)
-
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-
-            cap.release()
-            cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()
