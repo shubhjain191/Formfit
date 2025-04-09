@@ -1,5 +1,7 @@
+#--- START OF FILE main.py ---
+
 import streamlit as st
-import cv2
+import cv2 # Keep cv2 import though not directly used in main UI for consistency if ExerciseAiTrainer needs it loaded
 import time
 import ExerciseAiTrainer as exercise
 from chatbot_ui import chat_ui
@@ -7,330 +9,454 @@ from chatbot_ui import chat_ui
 def main():
     # Page configuration - sets up the browser tab appearance
     st.set_page_config(
-        page_title='FormFit AI',  # Updated name with proper capitalization
+        page_title='FormFit AI - Smart Workout Analysis', # More descriptive title
         page_icon='💪',
         layout='wide',
         initial_sidebar_state='expanded'
     )
 
-    # Enhanced CSS for modern, clean UI design with better readability and visual hierarchy
+    # --- Enhanced CSS for a Premium, Modern UI/UX ---
     st.markdown("""
         <style>
-        /* Main header styling with enhanced gradient */
+        /* === Variables for Consistent Theming === */
+        :root {
+            --primary-color: #4ECDC4; /* Teal */
+            --secondary-color: #556DFF; /* Blue */
+            --accent-color: #FF6B6B; /* Coral */
+            --text-color: #333; /* Dark Grey */
+            --text-color-light: #555; /* Medium Grey */
+            --bg-color-light: #f8f9fa; /* Very Light Grey */
+            --bg-color-white: #ffffff;
+            --border-color: #eaeaea; /* Light Grey Border */
+            --border-radius-md: 12px;
+            --border-radius-sm: 8px;
+            --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 8px 15px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 12px 25px rgba(0, 0, 0, 0.15);
+            --font-family: 'Inter', sans-serif; /* Clean sans-serif font */
+        }
+
+        /* Apply base font globally if possible */
+        body {
+            font-family: var(--font-family) !important;
+            color: var(--text-color);
+        }
+
+        /* === Main Header Styling === */
         .main-header {
-            font-size: 3rem;  /* Increased size for better visibility */
-            font-weight: 700;  /* Bolder font for emphasis */
-            background: linear-gradient(45deg, #FF6B6B, #4ECDC4, #556DFF);  /* Expanded gradient with more colors */
-            background-size: 200% auto;  /* Gradient size for animation */
-            animation: gradient-shift 10s ease infinite;  /* Subtle animation for visual interest */
+            font-size: 3.5rem; /* Slightly larger */
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--accent-color), var(--primary-color), var(--secondary-color));
+            background-size: 300% auto; /* Slower, wider gradient */
+            animation: gradient-shift 12s ease infinite;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 1.5rem;
-            text-align: center;  /* Center align header */
+            margin-bottom: 0.5rem; /* Reduced margin */
+            text-align: center;
+            line-height: 1.2; /* Tighter line height for large header */
         }
-        
-        /* Gradient animation keyframes */
+
+        /* Gradient Animation */
         @keyframes gradient-shift {
             0% {background-position: 0% 50%;}
             50% {background-position: 100% 50%;}
             100% {background-position: 0% 50%;}
         }
-        
-        /* Subtitle styling */
+
+        /* === Subtitle Styling === */
         .subtitle {
-            font-size: 1.5rem;
-            color: #555;
+            font-size: 1.6rem; /* Slightly larger */
+            color: var(--text-color-light);
             text-align: center;
-            margin-bottom: 2rem;
-            font-weight: 400;  /* Lighter weight for contrast with header */
+            margin-bottom: 2.5rem; /* Increased spacing after subtitle */
+            font-weight: 400;
         }
-        
-        /* Enhanced feature cards with hover effects */
+
+        /* === Feature Cards - Enhanced === */
         .feature-card {
-            padding: 2rem;  /* More padding for spacious feel */
-            border-radius: 12px;  /* More rounded corners */
-            border: none;  /* Remove border for cleaner look */
-            background: linear-gradient(145deg, #ffffff, #f0f0f0);  /* Subtle gradient background */
-            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);  /* Enhanced shadow */
+            padding: 2rem 1.5rem; /* Adjusted padding */
+            border-radius: var(--border-radius-md);
+            border: 1px solid var(--border-color); /* Subtle border */
+            background: var(--bg-color-white); /* Clean white background */
+            box-shadow: var(--shadow-sm); /* Softer shadow */
             margin-bottom: 1.5rem;
-            transition: all 0.3s ease;  /* Smooth transition for hover effects */
-            height: 100%;  /* Consistent height */
+            transition: transform 0.3s ease, box-shadow 0.3s ease; /* Smooth transitions */
+            height: 100%; /* Ensure cards in a row have same height */
+            display: flex; /* Use flexbox for alignment */
+            flex-direction: column; /* Stack content vertically */
+            align-items: center; /* Center content horizontally */
+            text-align: center; /* Center text */
         }
-        
-        /* Card hover effect */
+
         .feature-card:hover {
-            transform: translateY(-5px);  /* Slight lift effect */
-            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);  /* Enhanced shadow on hover */
+            transform: translateY(-6px); /* More noticeable lift */
+            box-shadow: var(--shadow-md); /* Enhanced shadow on hover */
         }
-        
-        /* Feature icon with improved styling */
+
+        /* Feature Icon */
         .feature-icon {
-            font-size: 2.5rem;  /* Larger icons */
-            margin-bottom: 1rem;  /* More space below icons */
-            color: #4ECDC4;  /* Themed color */
-            text-align: center;
+            font-size: 3rem; /* Larger icon */
+            margin-bottom: 1rem;
+            color: var(--primary-color); /* Use primary theme color */
         }
-        
-        /* Feature title styling */
+
+        /* Feature Title */
         .feature-title {
-            font-size: 1.3rem;
+            font-size: 1.25rem; /* Slightly adjusted size */
             font-weight: 600;
             margin-bottom: 0.75rem;
-            color: #333;  /* Darker for better contrast */
-            text-align: center;
+            color: var(--text-color);
         }
-        
-        /* Feature description styling */
+
+        /* Feature Description */
         .feature-description {
-            color: #555;  /* Slightly darker for better readability */
-            font-size: 1rem;
-            text-align: center;
-            line-height: 1.5;  /* Improved line height for readability */
+            color: var(--text-color-light);
+            font-size: 0.95rem; /* Slightly adjusted size */
+            line-height: 1.6; /* Better readability */
+            flex-grow: 1; /* Allows description to push footer elements down if needed */
         }
-        
-        /* Call-to-action button with improved styling */
-        .cta-button {
-            background: linear-gradient(90deg, #4ECDC4, #556DFF);  /* Gradient background */
+
+        /* === Buttons Styling (Targeting Streamlit's Button) === */
+        /* Style the container around the button for better control */
+        div[data-testid="stButton"] > button {
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
             color: white;
-            padding: 1rem 2rem;  /* Larger padding for better presence */
-            border-radius: 50px;  /* Pill shape button */
-            text-decoration: none;
-            font-weight: 600;
-            display: inline-block;
-            margin-top: 1.5rem;
-            transition: all 0.3s ease;  /* Smooth transition */
-            text-align: center;
+            padding: 0.75rem 1.5rem; /* Adjusted padding */
+            border-radius: 50px; /* Pill shape */
             border: none;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(78, 205, 196, 0.3);  /* Button shadow */
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: var(--shadow-sm);
+            width: 100%; /* Make button fill container if use_container_width=True */
+        }
+
+        div[data-testid="stButton"] > button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            filter: brightness(110%); /* Slight brightness increase */
         }
         
-        /* Button hover effect */
-        .cta-button:hover {
-            transform: translateY(-2px);  /* Slight lift */
-            box-shadow: 0 6px 15px rgba(78, 205, 196, 0.4);  /* Enhanced shadow */
-            background-position: right center;  /* Shift gradient on hover */
+        div[data-testid="stButton"] > button:active {
+            transform: translateY(0px);
+            box-shadow: var(--shadow-sm);
+            filter: brightness(100%);
         }
-        
-        /* Sidebar improvements */
-        .sidebar .selectbox {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 0.75rem;
-            border: 1px solid #e0e0e0;
-            margin-bottom: 1rem;
+
+
+        /* === Sidebar Enhancements === */
+        .st-emotion-cache-1lcbmhc { /* More specific selector for sidebar background */
+             background-color: var(--bg-color-white);
         }
-        
-        /* Section dividers */
-        .divider {
-            margin: 2rem 0;
-            border-top: 1px solid #eaeaea;
+
+        .st-emotion-cache-16txtl3 { /* Selector for sidebar content area */
+            padding: 1.5rem;
         }
-        
-        /* Tips box styling */
+
+        /* Sidebar Header */
+        .sidebar-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .sidebar-title {
+            color: var(--primary-color);
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .sidebar-subtitle {
+            font-size: 0.9rem;
+            color: var(--text-color-light);
+        }
+
+        /* Sidebar Selectbox */
+        div[data-testid="stSelectbox"] > div {
+            background-color: var(--bg-color-light);
+            border-radius: var(--border-radius-sm);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem; /* Add internal padding */
+            box-shadow: none;
+        }
+        div[data-testid="stSelectbox"] label {
+             font-weight: 600;
+             font-size: 1rem;
+             margin-bottom: 0.5rem;
+        }
+
+
+        /* === Section Dividers === */
+        hr.styled-divider {
+            border: none;
+            height: 1px;
+            background-color: var(--border-color);
+            margin: 3rem 0; /* Increased margin for spacing */
+        }
+
+        /* === Tips Box Styling === */
         .tips-box {
-            background-color: #f1f8ff;
-            border-left: 4px solid #4ECDC4;
-            padding: 1rem;
-            border-radius: 0 8px 8px 0;
+            background-color: #e6f7ff; /* Lighter blue */
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem 1.5rem;
+            border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
             margin-top: 1rem;
+            box-shadow: var(--shadow-sm);
         }
-        
-        /* Footer styling */
+        .tips-box ul {
+            margin-left: 0.5rem; /* Reduced indent */
+            padding-left: 1rem;
+            list-style: none; /* Remove default bullets */
+        }
+         .tips-box li {
+            margin-bottom: 0.5rem;
+            position: relative;
+            padding-left: 1.2rem; /* Space for custom bullet */
+        }
+        .tips-box li::before {
+            content: '💡'; /* Use icon as bullet */
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-size: 0.9rem;
+        }
+         .tips-box strong {
+             color: var(--primary-color);
+         }
+
+        /* === Footer Styling === */
         .footer {
             text-align: center;
-            color: #666;
-            padding: 1.5rem 0;
-            font-size: 0.9rem;
-            margin-top: 2rem;
+            color: #aaa; /* Lighter grey for less emphasis */
+            padding: 2rem 0 1rem 0;
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border-color); /* Add subtle top border */
+            margin-top: 3rem;
         }
-        
-        /* Mode header styling */
+
+        /* === Mode Header Styling === */
         .mode-header {
-            font-size: 1.8rem;
+            font-size: 2rem; /* Larger section header */
             font-weight: 600;
-            color: #333;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid #4ECDC4;
+            color: var(--text-color);
+            margin-bottom: 1.5rem; /* More space below header */
+            border-bottom: 3px solid var(--primary-color); /* Thicker, colored border */
             padding-bottom: 0.5rem;
-            display: inline-block;
+            display: inline-block; /* Ensure border only spans text width */
         }
-        
-        /* Info boxes styling */
-        .stAlert {
-            border-radius: 10px !important;
-            border: none !important;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05) !important;
+
+        /* === Info Boxes (st.info) Styling === */
+        div[data-testid="stAlert"] {
+            border-radius: var(--border-radius-sm) !important;
+            border: 1px solid var(--primary-color) !important; /* Use primary color for border */
+            background-color: #e6f7ff !important; /* Lighter blue background */
+            box-shadow: var(--shadow-sm) !important;
+            padding: 1rem 1.5rem !important; /* Adjust padding */
+            color: var(--text-color) !important; /* Ensure good text contrast */
         }
+        div[data-testid="stAlert"] ul {
+             margin-left: 0.5rem;
+             padding-left: 1rem;
+        }
+         div[data-testid="stAlert"] li {
+             margin-bottom: 0.3rem;
+         }
+
+        /* === Instruction Box Styling (Auto Classify) === */
+        .instruction-box {
+            background: var(--bg-color-light);
+            padding: 1.5rem 2rem;
+            border-radius: var(--border-radius-md);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            height: 100%; /* Match height with sibling column */
+        }
+        .instruction-box h3 {
+            margin-top: 0; /* Remove default top margin */
+            margin-bottom: 1rem;
+            color: var(--secondary-color); /* Use secondary color for emphasis */
+            font-weight: 600;
+        }
+         .instruction-box h4 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+        .instruction-box li {
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+        .instruction-box strong {
+            color: var(--primary-color);
+        }
+
+        /* === Call to Action Box Styling (Auto Classify) === */
+         .cta-box {
+            background: var(--bg-color-white);
+            padding: 2rem;
+            border-radius: var(--border-radius-md);
+            text-align: center;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            height: 100%; /* Match height with sibling column */
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Center content vertically */
+            align-items: center;
+        }
+        .cta-box p {
+            font-size: 1.1rem;
+            color: var(--text-color-light);
+            margin-bottom: 1.5rem; /* Space before button */
+        }
+
+        /* General spacing helper */
+        .section-spacer {
+            margin: 3rem 0;
+        }
+
         </style>
     """, unsafe_allow_html=True)
 
-    # Sidebar for navigation - improved styling and organization
+    # --- Sidebar ---
     with st.sidebar:
-        # App logo and branding in sidebar
+        # App logo and branding
         st.markdown("""
-            <div style="text-align: center; margin-bottom: 2rem;">
-                <h2 style="color: #4ECDC4; font-weight: 700;">🏋️‍♂️ FormFit AI</h2>
-                <p style="font-size: 0.9rem; color: #666;">Smart Workout Analysis</p>
+            <div class="sidebar-header">
+                <div class="sidebar-title">🏋️‍♂️ FormFit AI</div>
+                <div class="sidebar-subtitle">Smart Workout Analysis</div>
             </div>
         """, unsafe_allow_html=True)
-        
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)  # Visual separator
-        
-        # Mode selection with improved UI
-        st.markdown("#### 🎯 Choose Your Mode")
+
+        # Mode selection
+        st.markdown("##### **🎯 Choose Your Mode**") # Bolder label
         options = st.selectbox(
-            'Select training mode',
+            'Select training mode:', # Clearer label
             ('Auto Classify', 'Chatbot'),
             key='mode_select',
-            help="Choose how you want to use FormFit AI"  # Help tooltip
+            label_visibility="collapsed", # Hide default label, use markdown above
+            help="Select 'Auto Classify' for real-time form analysis or 'Chatbot' for fitness advice."
         )
-        
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)  # Visual separator
-        
-        # Enhanced tips section with better formatting
-        st.markdown("#### 💡 Quick Tips")
+
+        st.markdown('<hr class="styled-divider" style="margin: 1.5rem 0;">', unsafe_allow_html=True) # Divider
+
+        # Quick Tips section
+        st.markdown("##### **💡 Quick Setup Tips**") # Bolder label
         st.markdown("""
             <div class="tips-box">
-                <ul style="margin-left: 1rem; padding-left: 0;">
-                    <li><strong>Lighting:</strong> Ensure good, even lighting</li>
-                    <li><strong>Position:</strong> Face the camera directly</li>
-                    <li><strong>Clothing:</strong> Wear fitted, high-contrast clothing</li>
-                    <li><strong>Space:</strong> Clear your workout area of obstacles</li>
-                    <li><strong>Distance:</strong> Position 6-8 feet from camera</li>
+                <ul>
+                    <li><strong>Lighting:</strong> Ensure bright, even illumination. Avoid backlighting.</li>
+                    <li><strong>Visibility:</strong> Keep your full body in frame throughout the exercise.</li>
+                    <li><strong>Clothing:</strong> Wear form-fitting clothes that contrast with your background.</li>
+                    <li><strong>Space:</strong> Clear the area around you for safe movement.</li>
+                    <li><strong>Distance:</strong> Stand about 6-8 feet (2-2.5m) from the camera.</li>
                 </ul>
             </div>
         """, unsafe_allow_html=True)
-        
-        # Version information for transparency
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+        # Version info
+        st.markdown('<hr class="styled-divider" style="margin: 1.5rem 0;">', unsafe_allow_html=True) # Divider
         st.markdown("""
             <div style="text-align: center; margin-top: 2rem;">
-                <p style="font-size: 0.8rem; color: #999;">FormFit AI v2.0</p>
+                <p style="font-size: 0.8rem; color: #aaa;">FormFit AI v2.1</p>
             </div>
         """, unsafe_allow_html=True)
 
-    # Main content area with improved header styling
-    col1, col2, col3 = st.columns([1, 2, 1])  # Column layout for centered content
-    with col2:
-        # Main header with animated gradient effect
-        st.markdown('<h1 class="main-header">FormFit AI</h1>', unsafe_allow_html=True)
-        # Descriptive subtitle
-        st.markdown('<p class="subtitle">Advanced Exercise Analysis & Real-time Coaching</p>', unsafe_allow_html=True)
+    # --- Main Content Area ---
+    st.markdown('<h1 class="main-header">FormFit AI</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Your Personal AI Fitness Trainer</p>', unsafe_allow_html=True)
 
-    # Features section with enhanced visual cards
-    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-    
-    # Creating four equal columns for feature cards
-    col1, col2, col3, col4 = st.columns(4)
+    # --- Features Section ---
+    st.markdown("### Key Features") # Simple section header
+    cols = st.columns(4, gap="medium") # Add medium gap between columns
 
-    # Enhanced feature cards with better descriptions and visual styling
-    with col1:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">🤖</div>
-                <div class="feature-title">AI Form Analysis</div>
-                <div class="feature-description">Get precise feedback on your exercise technique with computer vision analysis</div>
-            </div>
-        """, unsafe_allow_html=True)
+    feature_data = [
+        {"icon": "🤖", "title": "AI Form Analysis", "desc": "Get precise, real-time feedback on exercise technique using advanced computer vision."},
+        {"icon": "📊", "title": "Smart Rep Counter", "desc": "Automatically count valid reps, focusing on quality movements, not just quantity."},
+        {"icon": "💬", "title": "AI Coaching", "desc": "Receive instant, personalized guidance and form correction cues during your workout."},
+        {"icon": "🎯", "title": "Auto Exercise ID", "desc": "The AI intelligently identifies the exercise you're performing - no manual selection needed."}
+    ]
 
-    with col2:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">📊</div>
-                <div class="feature-title">Smart Rep Counter</div>
-                <div class="feature-description">Automatic counting with form validation ensures quality over quantity</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">💬</div>
-                <div class="feature-title">AI Coach</div>
-                <div class="feature-description">Receive personalized guidance and form correction in real-time</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">🎯</div>
-                <div class="feature-title">Auto Detection</div>
-                <div class="feature-description">Smart exercise identification without manual selection needed</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-    # Mode-specific content with improved UI elements
-    if options == 'Chatbot':
-        # Chatbot interface with better introduction and explanation
-        st.markdown('<div class="mode-header">💬 AI Form Coach</div>', unsafe_allow_html=True)
-        
-        # More informative instructions for the chatbot
-        st.info("""
-            Your personal AI fitness assistant is ready to help!
-            - Ask about proper exercise techniques
-            - Get personalized workout recommendations
-            - Learn about injury prevention
-            - Receive nutrition and recovery advice
-        """)
-        
-        # Launch the chatbot UI
-        chat_ui()  # This calls the imported chat interface
-
-    elif options == 'Auto Classify':
-        # Auto classification interface with better layout and instructions
-        st.markdown('<div class="mode-header">🎥 AI Form Analysis</div>', unsafe_allow_html=True)
-        
-        # Create two columns for instructions and start button
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # More detailed instructions with visual hierarchy
-            st.markdown("""
-                ### How It Works
-                1. **Position yourself** in view of your camera
-                2. **Begin your exercise** when ready
-                3. **AI will automatically detect** your movement type
-                4. **Receive real-time feedback** on your form
-                
-                #### Supported Exercises:
-                - Push-ups
-                - Squats
-                - Bicep Curls
-                - Shoulder Press
-            """)
-        
-        with col2:
-            # More prominent and attractive start button
-            st.markdown("""
-                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 12px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
-                    <p style="margin-bottom: 1rem;">Ready to analyze your form?</p>
+    for i, feature in enumerate(feature_data):
+        with cols[i]:
+            st.markdown(f"""
+                <div class="feature-card">
+                    <div class="feature-icon">{feature['icon']}</div>
+                    <div class="feature-title">{feature['title']}</div>
+                    <div class="feature-description">{feature['desc']}</div>
                 </div>
             """, unsafe_allow_html=True)
-            
-            # Start button with more prominent styling
-            start_button = st.button('Start Analysis 🚀', use_container_width=True)
-            
-        # Logic for when start button is clicked
-        if start_button:
-            # Loading state with more informative message
-            with st.spinner('Initializing AI Analysis... Please prepare for your workout'):
-                time.sleep(1)  # Brief delay to initialize components
-                exer = exercise.Exercise()  # Create Exercise class instance
-                exer.auto_classify_and_count()  # Start the exercise analysis
 
-    # Footer section with improved styling and content
-    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("""
-            <div class="footer">
-                <p>Made with ❤️ by Shubh Jain</p>
-            </div>
+    st.markdown('<hr class="styled-divider">', unsafe_allow_html=True)
+
+    # --- Mode-Specific Content ---
+    if options == 'Chatbot':
+        st.markdown('<div class="mode-header">💬 AI Form Coach & Fitness Advisor</div>', unsafe_allow_html=True)
+        st.info("""
+            **Chat with your AI Fitness Assistant!** Ask about:
+            *   Proper exercise form and technique variations.
+            *   Personalized workout routines and progression.
+            *   Injury prevention strategies and recovery tips.
+            *   General fitness and nutrition advice.
+        """)
+        chat_ui() # Launch the chatbot UI
+
+    elif options == 'Auto Classify':
+        st.markdown('<div class="mode-header">🎥 Real-Time Exercise Analysis</div>', unsafe_allow_html=True)
+
+        # Layout for instructions and start button
+        col1, col2 = st.columns([3, 2], gap="large") # Adjust column ratio and gap
+
+        with col1:
+            st.markdown("""
+                <div class="instruction-box">
+                    <h3>How It Works:</h3>
+                    <ol>
+                        <li><strong>Prepare:</strong> Position yourself clearly in your camera's view (check tips in sidebar!).</li>
+                        <li><strong>Start Exercise:</strong> Begin performing one of the supported exercises.</li>
+                        <li><strong>AI Detection:</strong> The system will automatically identify your exercise.</li>
+                        <li><strong>Get Feedback:</strong> Receive real-time form analysis, rep counts, and coaching cues directly on screen.</li>
+                    </ol>
+                    <h4>Supported Exercises:</h4>
+                     <ul>
+                        <li>Push-ups</li>
+                        <li>Squats</li>
+                        <li>Bicep Curls</li>
+                        <li>Shoulder Press</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+             st.markdown("""
+                <div class="cta-box">
+                    <p>Ready to perfect your form?</p>
+                </div>
+            """, unsafe_allow_html=True)
+             # Place button inside the styled box using columns structure
+             start_button = st.button('Start AI Analysis Session 🚀', use_container_width=True, key="start_analysis")
+
+
+        # Logic for starting analysis
+        if start_button:
+            st.markdown('<hr class="styled-divider" style="margin: 1.5rem 0;">', unsafe_allow_html=True)
+            with st.spinner('Initializing AI Analysis... Get ready to move!'):
+                time.sleep(1.5) # Slightly longer perceived loading time
+                try:
+                    exer = exercise.Exercise() # Create Exercise class instance
+                    # This function likely contains the video loop and Streamlit element updates
+                    exer.auto_classify_and_count()
+                except Exception as e:
+                    st.error(f"An error occurred during analysis setup: {e}")
+                    st.warning("Please ensure your camera is connected and permissions are granted.")
+
+    # --- Footer ---
+    st.markdown("""
+        <div class="footer">
+             Made with <span style="color: #FF6B6B;">♥</span> by Shubh Jain
+        </div>
         """, unsafe_allow_html=True)
 
+
 if __name__ == '__main__':
-    main()  # Run the main application function
+    main()
+
+#--- END OF FILE main.py ---
