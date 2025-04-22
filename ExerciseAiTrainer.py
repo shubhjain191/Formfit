@@ -451,6 +451,44 @@ class Exercise:
         self.is_resting = {'push_up': False, 'squat': False, 'bicep_curl': False, 'shoulder_press': False}
         self.rest_start_time = {'push_up': 0, 'squat': 0, 'bicep_curl': 0, 'shoulder_press': 0}
         self.rest_durations = {'push_up': [], 'squat': [], 'bicep_curl': [], 'shoulder_press': []}  # Track rest periods
+        
+        # Enhanced fatigue tracking per set
+        self.set_fatigue_metrics = {
+            'push_up': [],
+            'squat': [],
+            'bicep_curl': [],
+            'shoulder_press': []
+        }  # List of dicts with metrics for each set
+        
+        # Enhanced ROM targets with ideal ranges
+        self.rom_targets = {
+            'push_up': {'min': 70, 'max': 110, 'ideal': 90},
+            'squat': {'min': 65, 'max': 105, 'ideal': 90},
+            'bicep_curl': {'min': 80, 'max': 180, 'ideal': 150},
+            'shoulder_press': {'min': 150, 'max': 210, 'ideal': 180}
+        }
+        
+        # Per-set baselines to improve fatigue tracking between sets
+        self.set_baselines = {
+            'push_up': {'speed': {}, 'rom': {}, 'variability': {}},
+            'squat': {'speed': {}, 'rom': {}, 'variability': {}},
+            'bicep_curl': {'speed': {}, 'rom': {}, 'variability': {}},
+            'shoulder_press': {'speed': {}, 'rom': {}, 'variability': {}}
+        }
+        
+        # Specific tracking for shoulder press exercise
+        self.shoulder_press_metrics = {
+            'speed_history': [],
+            'rom_history': [],
+            'form_history': []
+        }
+        
+        # New variables for enhanced rest period visualization and set transition
+        self.rest_timer_start = {'push_up': 0, 'squat': 0, 'bicep_curl': 0, 'shoulder_press': 0}
+        self.show_set_transition = {'push_up': False, 'squat': False, 'bicep_curl': False, 'shoulder_press': False}
+        self.transition_message = {'push_up': "", 'squat': "", 'bicep_curl': "", 'shoulder_press': ""}
+        self.transition_start_time = {'push_up': 0, 'squat': 0, 'bicep_curl': 0, 'shoulder_press': 0}
+        self.transition_duration = 3.0  # Show transition message for 3 seconds
 
     def log_rep_data(self, exercise_type, timestamp, angles):
         """Log data for a single repetition"""
@@ -507,8 +545,20 @@ class Exercise:
         self.last_activity_time = current_time
 
     def detect_fatigue(self, exercise_type, window_size=5, min_reps=3, weight_factor=1.0):
-        """Detect fatigue levels and handle set detection through rest periods"""
+        """
+        Enhanced fatigue detection with accurate tracking across multiple sets.
+        
+        Monitors:
+        1. Speed degradation - comparing to baseline of initial reps
+        2. ROM reduction - tracking changes in range of motion
+        3. Form stability - measuring variability in movement patterns
+        
+        Returns fatigue score and relevant feedback for the user.
+        """
         current_time = time.time()
+        
+        # Get current set number
+        current_set = self.sets[exercise_type] + 1 if self.current_set_reps[exercise_type] > 0 else self.sets[exercise_type]
         
         # Check for rest and track it for set detection
         rest_time = current_time - self.last_rep_time[exercise_type]
@@ -519,9 +569,13 @@ class Exercise:
             self.is_resting[exercise_type] = True
             self.rest_start_time[exercise_type] = self.last_rep_time[exercise_type]
             
+            # Activate rest timer visualization # <-- This toggles the overlay
+            self.rest_timer_start[exercise_type] = current_time
+            
             # Display rest time to user if it's getting close to a new set
             if rest_time > self.set_pause_threshold * 0.5:  # More than half the threshold
-                rest_warning = f"Resting {rest_time:.0f}s - new set in {max(0, self.set_pause_threshold - rest_time):.0f}s"
+                fatigue_percent = int(self.fatigue_level * 100)
+                rest_warning = f"Resting {rest_time:.0f}s - new set in {max(0, self.set_pause_threshold - rest_time):.0f}s. Current fatigue: {fatigue_percent}%"
                 return self.fatigue_level, rest_warning
         
         # Check for completion of a set due to extended rest
@@ -531,6 +585,20 @@ class Exercise:
                 # Save the completed set
                 self.set_history[exercise_type].append(self.current_set_reps[exercise_type])
                 self.set_end_times[exercise_type] = self.last_rep_time[exercise_type]
+                
+                # Save fatigue metrics for this set before incrementing
+                if current_set-1 < len(self.set_fatigue_metrics[exercise_type]):
+                    set_metrics = self.set_fatigue_metrics[exercise_type][current_set-1]
+                    set_metrics['end_fatigue'] = self.fatigue_level
+                    set_metrics['reps'] = self.current_set_reps[exercise_type]
+                    
+                # Set the transition message and flag
+                next_set = self.sets[exercise_type] + 1
+                self.show_set_transition[exercise_type] = True
+                self.transition_message[exercise_type] = f"Set {next_set} Starting"
+                self.transition_start_time[exercise_type] = current_time
+                
+                # Increment set counter
                 self.sets[exercise_type] += 1
                 
                 # Reset for next set
@@ -538,97 +606,240 @@ class Exercise:
                 
                 # Reduce fatigue during rest
                 if self.fatigue_level > 0:
-                    decay_rate = 0.05
+                    # Exponential decay based on rest time
+                    decay_rate = 0.05  # 5% decay per second
+                    previous_fatigue = self.fatigue_level
                     self.fatigue_level *= math.exp(-decay_rate * rest_time)
-                    self.fatigue_level = max(0.1, self.fatigue_level)
+                    self.fatigue_level = max(0.1, self.fatigue_level)  # Keep minimum fatigue at 10%
                     self.prev_fatigue_score = self.fatigue_level
+                    
+                    # Calculate how much fatigue was reduced
+                    fatigue_reduction = previous_fatigue - self.fatigue_level
+                    fatigue_percent = int(self.fatigue_level * 100)
+                    
+                    # Log the set completion due to extended rest
+                    print(f"Set {self.sets[exercise_type]} of {exercise_type} completed with {self.set_history[exercise_type][-1]} reps due to {rest_time:.1f}s rest.")
+                    print(f"Fatigue reduced by {fatigue_reduction:.2f} ({fatigue_percent}% remaining)")
+                    
+                    return self.fatigue_level, f"Set {self.sets[exercise_type]} completed! Rest period: {rest_time:.0f}s. Fatigue decreased to {fatigue_percent}%"
+        
+        # If user has resumed exercise after a rest period, update status
+        if self.is_resting[exercise_type] and self.last_rep_time[exercise_type] > self.rest_start_time[exercise_type]:
+            # Calculate the rest duration and add it to history
+            rest_duration = self.last_rep_time[exercise_type] - self.rest_start_time[exercise_type]
+            self.rest_durations[exercise_type].append(rest_duration)
+            
+            # Reset resting status
+            self.is_resting[exercise_type] = False
+            
+            # If this was a full rest period that didn't get caught by the above logic
+            # (can happen if we just missed the threshold), handle it now
+            if rest_duration >= self.set_pause_threshold * 0.9 and self.current_set_reps[exercise_type] == 1:
+                # Set transition message
+                self.show_set_transition[exercise_type] = True
+                self.transition_message[exercise_type] = f"Set {current_set} Starting"
+                self.transition_start_time[exercise_type] = current_time
                 
-                # Log the set completion due to extended rest
-                print(f"Set {self.sets[exercise_type]} of {exercise_type} completed with {self.set_history[exercise_type][-1]} reps due to {rest_time:.1f}s rest.")
-                return self.fatigue_level, f"Set {self.sets[exercise_type]} completed! Rest period: {rest_time:.0f}s"
+                print(f"Resumed exercise after {rest_duration:.1f}s rest. Starting set {current_set}.")
         
         # Normal fatigue calculation
         if len(self.rep_timestamps) < min_reps or not self.angle_history[exercise_type]:
             return self.fatigue_level, None
 
-        total_reps = len(self.rep_timestamps)
+        # Get total reps in this exercise
+        total_reps = len(self.angle_history[exercise_type])
         effective_window = min(window_size, total_reps)
-        window_timestamps = self.rep_timestamps[-effective_window:]
+        
+        # Get timestamps and angles for the latest window
+        all_timestamps = [t for t in self.rep_timestamps if t]
+        window_timestamps = all_timestamps[-effective_window:]
         window_angles = self.angle_history[exercise_type][-effective_window:]
 
-        # Adaptive baseline speed
-        baseline_reps = min(5, total_reps)
-        if exercise_type not in self.baseline_speeds or total_reps == baseline_reps:
-            baseline_speed = np.mean(np.diff(self.rep_timestamps[:baseline_reps])) if total_reps >= min_reps else 0.0
-            self.baseline_speeds[exercise_type] = baseline_speed
+        # Get or establish baseline speed for this set
+        set_key = f"set_{current_set}"
+        baseline_reps = min(3, self.current_set_reps[exercise_type])  # Use first 3 reps of set as baseline
+        
+        # Calculate speed baseline if it doesn't exist for this set
+        if set_key not in self.set_baselines[exercise_type]['speed'] and self.current_set_reps[exercise_type] >= baseline_reps:
+            # Calculate initial speed baseline from first few reps of the set
+            set_start_idx = total_reps - self.current_set_reps[exercise_type]
+            baseline_timestamps = all_timestamps[set_start_idx:set_start_idx + baseline_reps]
+            if len(baseline_timestamps) > 1:
+                baseline_speed = np.mean(np.diff(baseline_timestamps))
+                self.set_baselines[exercise_type]['speed'][set_key] = baseline_speed
+                print(f"Set {current_set} baseline speed established: {baseline_speed:.2f}s per rep")
+                
+                # For ROM baseline
+                baseline_angles = self.angle_history[exercise_type][set_start_idx:set_start_idx + baseline_reps]
+                key_angle = 'right_arm' if exercise_type in ['push_up', 'bicep_curl', 'shoulder_press'] else 'right_leg'
+                baseline_angles_values = [a[key_angle] for a in baseline_angles]
+                
+                # Get appropriate ROM calculation based on exercise type
+                if exercise_type in ['push_up', 'squat']:
+                    baseline_rom = min(baseline_angles_values)
+                else:
+                    baseline_rom = max(baseline_angles_values)
+                
+                self.set_baselines[exercise_type]['rom'][set_key] = baseline_rom
+                
+                # For variability baseline
+                baseline_var = np.std(baseline_angles_values)
+                self.set_baselines[exercise_type]['variability'][set_key] = baseline_var
+                
+                # Initialize metrics tracking for this set
+                if len(self.set_fatigue_metrics[exercise_type]) <= current_set-1:
+                    self.set_fatigue_metrics[exercise_type].append({
+                        'set': current_set,
+                        'start_time': self.set_start_times[exercise_type],
+                        'baseline_speed': baseline_speed,
+                        'baseline_rom': baseline_rom,
+                        'baseline_var': baseline_var,
+                        'max_speed_change': 0,
+                        'max_rom_change': 0,
+                        'max_var_change': 0,
+                        'start_fatigue': self.fatigue_level,
+                        'end_fatigue': 0,
+                        'reps': 0
+                    })
+        
+        # Get the actual baseline values for calculations
+        baseline_speed = self.set_baselines[exercise_type]['speed'].get(set_key, 0)
+        baseline_rom = self.set_baselines[exercise_type]['rom'].get(set_key, 0)
+        baseline_var = self.set_baselines[exercise_type]['variability'].get(set_key, 0)
+        
+        # Calculate current metrics
+        rep_times = np.diff(window_timestamps) if len(window_timestamps) > 1 else [0]
+        avg_rep_speed = np.mean(rep_times) if len(rep_times) > 0 else 0
+        
+        # Speed score - how much has speed degraded from baseline
+        if baseline_speed > 0:
+            speed_change = (avg_rep_speed - baseline_speed) / baseline_speed
+            speed_score = min(1.0, max(0.0, speed_change))
+            
+            # Update max speed change for this set
+            if current_set-1 < len(self.set_fatigue_metrics[exercise_type]):
+                self.set_fatigue_metrics[exercise_type][current_set-1]['max_speed_change'] = max(
+                    self.set_fatigue_metrics[exercise_type][current_set-1]['max_speed_change'],
+                    speed_change
+                )
         else:
-            baseline_speed = self.baseline_speeds[exercise_type]
-        rep_times = np.diff(window_timestamps)
-        avg_rep_speed = np.mean(rep_times) if len(rep_times) > 0 else baseline_speed
-        speed_score = min(1.0, max(0.0, (avg_rep_speed - baseline_speed) / baseline_speed)) if baseline_speed > 0 else 0.0
+            speed_score = 0.0
 
-        # Variability score
+        # Variability score - how consistent are the movements
         key_angle = 'right_arm' if exercise_type in ['push_up', 'bicep_curl', 'shoulder_press'] else 'right_leg'
-        angles = [rep[key_angle] for rep in window_angles]
-        variability = np.std(angles)
-        variability_score = min(1.0, variability / 15.0)
-
-        # Flexible ROM targets
-        rom_targets = {
-            'push_up': (70, 110),
-            'squat': (65, 105),
-            'bicep_curl': (80, 180),
-            'shoulder_press': (150, 210)
-        }
-        min_rom, max_rom = rom_targets[exercise_type]
-        if exercise_type in ['push_up', 'squat']:
-            rom = min(angles)
-            rom_score = max(0.0, (min_rom - rom) / (min_rom - 50)) if rom < min_rom else 0.0
+        angles = [rep.get(key_angle, 0) for rep in window_angles]
+        variability = np.std(angles) if angles else 0
+        
+        # Calculate variability change relative to baseline
+        if baseline_var > 0:
+            var_change = (variability - baseline_var) / baseline_var
+            variability_score = min(1.0, max(0.0, var_change))
+            
+            # Update max variability change for this set
+            if current_set-1 < len(self.set_fatigue_metrics[exercise_type]):
+                self.set_fatigue_metrics[exercise_type][current_set-1]['max_var_change'] = max(
+                    self.set_fatigue_metrics[exercise_type][current_set-1]['max_var_change'],
+                    var_change
+                )
         else:
-            rom = max(angles)
-            rom_score = max(0.0, (rom - max_rom) / (250 - max_rom)) if rom > max_rom else 0.0
-        rom_score = min(1.0, rom_score)
+            variability_score = min(1.0, variability / 15.0)  # Fallback if baseline not established
 
-        # Fatigue score with weight factor
-        fatigue_score = (0.4 * speed_score + 0.3 * variability_score + 0.3 * rom_score) * weight_factor
-        fatigue_score = min(1.0, max(0.0, 0.7 * fatigue_score + 0.3 * self.prev_fatigue_score))
+        # Calculate ROM changes from ideal or from baseline
+        if exercise_type in ['push_up', 'squat']:
+            current_rom = min(angles) if angles else 0
+            ideal_rom = self.rom_targets[exercise_type]['min']
+            
+            if baseline_rom > 0:
+                rom_change = (baseline_rom - current_rom) / (baseline_rom - 50)
+                rom_score = min(1.0, max(0.0, rom_change))
+            else:
+                rom_score = max(0.0, (ideal_rom - current_rom) / (ideal_rom - 50)) if current_rom < ideal_rom else 0.0
+        else:
+            current_rom = max(angles) if angles else 0
+            ideal_rom = self.rom_targets[exercise_type]['max']
+            
+            if baseline_rom > 0:
+                rom_change = (current_rom - baseline_rom) / (250 - baseline_rom)
+                rom_score = min(1.0, max(0.0, rom_change))
+            else:
+                rom_score = max(0.0, (current_rom - ideal_rom) / (250 - ideal_rom)) if current_rom > ideal_rom else 0.0
+        
+        # Update max ROM change for this set
+        if current_set-1 < len(self.set_fatigue_metrics[exercise_type]):
+            rom_change = abs(current_rom - baseline_rom) / baseline_rom if baseline_rom > 0 else 0
+            self.set_fatigue_metrics[exercise_type][current_set-1]['max_rom_change'] = max(
+                self.set_fatigue_metrics[exercise_type][current_set-1]['max_rom_change'],
+                rom_change
+            )
+
+        # Special tracking for shoulder press
+        if exercise_type == 'shoulder_press':
+            self.shoulder_press_metrics['speed_history'].append(avg_rep_speed)
+            self.shoulder_press_metrics['rom_history'].append(current_rom)
+            self.shoulder_press_metrics['form_history'].append(variability)
+
+        # Calculate combined fatigue score with weighted components
+        if exercise_type == 'shoulder_press':
+            # Follow the example weighting: speed 50%, ROM 30%, form 20%
+            fatigue_score = (0.5 * speed_score + 0.3 * rom_score + 0.2 * variability_score) * weight_factor
+        else:
+            # Default weighting for other exercises
+            fatigue_score = (0.4 * speed_score + 0.3 * rom_score + 0.3 * variability_score) * weight_factor
+        
+        # Smooth fatigue score with previous value to avoid jumps
+        smoothed_fatigue_score = min(1.0, max(0.0, 0.7 * fatigue_score + 0.3 * self.prev_fatigue_score))
         
         # Update fatigue level and trend
-        self.fatigue_level = max(self.fatigue_level, fatigue_score)
-        fatigue_trend = fatigue_score - self.prev_fatigue_score
+        previous_fatigue = self.fatigue_level
+        self.fatigue_level = max(self.fatigue_level, smoothed_fatigue_score)
+        fatigue_trend = smoothed_fatigue_score - self.prev_fatigue_score
         self.fatigue_trend = 0.7 * fatigue_trend + 0.3 * self.fatigue_trend if self.prev_fatigue_score > 0 else fatigue_trend
-        self.prev_fatigue_score = fatigue_score
-
-        # Warning logic
-        dominant_factor = max([('speed', speed_score), ('variability', variability_score), ('ROM', rom_score)], key=lambda x: x[1])[0]
-        if fatigue_score < 0.2:
-            warning = "Feeling fresh—great start!" if total_reps <= min_reps else None
-        elif fatigue_score < 0.4:
-            if dominant_factor == 'speed':
-                warning = "Pace slowing a bit—stay steady!"
-            elif dominant_factor == 'variability':
-                warning = "Slight wobble—keep it smooth!"
+        self.prev_fatigue_score = smoothed_fatigue_score
+        
+        # Find dominant factor in fatigue (what's contributing most)
+        fatigue_components = [
+            ('speed', speed_score, 'pace is slowing'),
+            ('form', variability_score, 'movement is less stable'),
+            ('ROM', rom_score, 'range of motion is decreasing')
+        ]
+        dominant_factor = max(fatigue_components, key=lambda x: x[1])
+        
+        # Generate appropriate warning message
+        warning = None
+        fatigue_percent = int(self.fatigue_level * 100)
+        
+        if self.fatigue_level < 0.2:
+            warning = "Feeling fresh—great start!" if self.current_set_reps[exercise_type] <= 3 else None
+        elif self.fatigue_level < 0.4:
+            if dominant_factor[0] == 'speed':
+                warning = f"Pace slowing a bit—stay steady! ({fatigue_percent}% fatigue)"
+            elif dominant_factor[0] == 'form':
+                warning = f"Slight wobble—keep it smooth! ({fatigue_percent}% fatigue)"
             else:
-                warning = "Range dipping—push a little more!"
-        elif fatigue_score < 0.6:
-            if dominant_factor == 'speed':
-                warning = f"Slowing down on {exercise_type}—rest soon?"
-            elif dominant_factor == 'variability':
-                warning = "Form's getting shaky—focus up!"
+                warning = f"Range dipping—push a little more! ({fatigue_percent}% fatigue)"
+        elif self.fatigue_level < 0.6:
+            if dominant_factor[0] == 'speed':
+                warning = f"Set {current_set}: Slowing down on {exercise_type}—rest soon? ({fatigue_percent}% fatigue)"
+            elif dominant_factor[0] == 'form':
+                warning = f"Set {current_set}: Form's getting shaky—focus up! ({fatigue_percent}% fatigue)"
             else:
-                warning = "Range dropping—extend fully!"
+                warning = f"Set {current_set}: Range dropping—extend fully! ({fatigue_percent}% fatigue)"
         else:
-            if dominant_factor == 'speed':
-                warning = "High fatigue: Pace way off—rest now!"
-            elif dominant_factor == 'variability':
-                warning = "High fatigue: Form's off—take a break!"
+            if dominant_factor[0] == 'speed':
+                warning = f"Set {current_set}: High fatigue ({fatigue_percent}%)! Pace way off—rest soon"
+            elif dominant_factor[0] == 'form':
+                warning = f"Set {current_set}: High fatigue ({fatigue_percent}%)! Form's off—focus on technique"
             else:
-                warning = "High fatigue: Range too low—pause!"
+                warning = f"Set {current_set}: High fatigue ({fatigue_percent}%)! Range too low—take a break soon"
 
-        if self.fatigue_trend < -0.1 and fatigue_score < 0.4:
-            warning = f"Recovering well on {exercise_type}—nice bounce back!"
+        # Recovery message if fatigue is trending down
+        if self.fatigue_trend < -0.1 and self.fatigue_level < 0.4:
+            warning = f"Recovering well on {exercise_type}—nice bounce back! ({fatigue_percent}% fatigue)"
 
-        print(f"{exercise_type} - Speed: {speed_score:.2f}, Variability: {variability_score:.2f}, ROM: {rom_score:.2f}, Fatigue: {self.fatigue_level:.2f}, Trend: {self.fatigue_trend:.2f}")
+        # Log detailed metrics
+        print(f"{exercise_type} Set {current_set} - Speed: {speed_score:.2f}, ROM: {rom_score:.2f}, Form: {variability_score:.2f}")
+        print(f"Fatigue: {self.fatigue_level:.2f} ({fatigue_percent}%), Trend: {self.fatigue_trend:+.2f}")
+        
         return self.fatigue_level, warning
 
     def export_fatigue_data(self, filename="fatigue_data.csv"):
@@ -974,6 +1185,14 @@ class Exercise:
                         self.prev_angles = current_angles
                         self.fatigue_feedback = new_fatigue_feedback
                     
+                    # Add rest timer overlay if in rest period
+                    # if self.show_rest_timer[exercise_type]:
+                    #     frame = self.draw_rest_timer_overlay(frame, exercise_type, current_time)
+                    
+                    # Add set transition overlay if needed
+                    if self.show_set_transition[exercise_type]:
+                        frame = self.draw_set_transition_overlay(frame, exercise_type, current_time)
+                    
                     # Update form feedback display - increased font size
                     with form_feedback_placeholder.container():
                         if self.form_feedback:
@@ -1078,59 +1297,21 @@ class Exercise:
                                 ))
                         
                         if exercise_counts:
-                            # Fixed HTML rendering with proper content structure
-                            st.markdown("<div class='exercise-tracking-container'>", unsafe_allow_html=True)
-                            
+                            # Use simpler Streamlit elements instead of complex HTML
                             for info in exercise_counts:
                                 name, total_reps, sets, set_reps, is_resting, rest_duration, pause_threshold = info
                                 
-                                # Calculate color based on exercise type
-                                color_class = "orange" if name == "Push-up" else "green" if name == "Squat" else "blue" if name == "Curl" else "purple"
+                                st.metric(label=f"{name} - Set {sets}", value=f"{set_reps} / {total_reps} Reps")
                                 
-                                # Create card with proper HTML
-                                card_html = f"""
-                                <div class="exercise-card {color_class}-card">
-                                    <div class="exercise-header">
-                                        <span class="exercise-name">{name}</span>
-                                        <span class="exercise-set">Set {sets}</span>
-                                    </div>
-                                    <div class="exercise-stats">
-                                        <div class="stat-item">
-                                            <span class="stat-label">Total:</span>
-                                            <span class="stat-value">{total_reps} reps</span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span class="stat-label">Current:</span>
-                                            <span class="stat-value">{set_reps} reps</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                """
-                                
-                                # Add rest timer if applicable
+                                # Display rest information if applicable
                                 if is_resting:
-                                    rest_progress = min(100, int((rest_duration / pause_threshold) * 100))
+                                    rest_progress = min(1.0, rest_duration / pause_threshold)
                                     time_to_new_set = max(0, int(pause_threshold - rest_duration))
-                                    rest_color = "green" if rest_progress >= 90 else "yellow" if rest_progress >= 50 else "red"
                                     
-                                    card_html += f"""
-                                    <div class="rest-timer">
-                                        <div class="rest-header">
-                                            <span>Resting: {int(rest_duration)}s</span>
-                                            <span class="new-set-time {rest_color}">New set in {time_to_new_set}s</span>
-                                        </div>
-                                        <div class="progress-bar-bg">
-                                            <div class="progress-bar-fill {rest_color}" style="width: {rest_progress}%"></div>
-                                        </div>
-                                    </div>
-                                    """
-                                
-                                # Close the card div
-                                card_html += "</div>"
-                                st.markdown(card_html, unsafe_allow_html=True)
-                            
-                            # Close the container div
-                            st.markdown("</div>", unsafe_allow_html=True)
+                                    st.info(f"Resting: {int(rest_duration)}s (New set in {time_to_new_set}s)")
+                                    st.progress(rest_progress)
+                                st.divider() # Add a separator between exercises
+                                    
                         else:
                             # More attractive message when no exercises are tracked
                             st.markdown("""
@@ -1700,6 +1881,14 @@ class Exercise:
             st.markdown("### Current Count")
             count_display = st.markdown(f"## {counter}")
             
+            # Add fatigue and set information
+            st.markdown("### Stats")
+            fatigue_display = st.empty()
+            
+            # Add rest timer display
+            st.markdown("### Rest Timer")
+            rest_timer_display = st.empty()
+            
             if show_debug:
                 st.markdown("### Angle Debug")
                 angle_display = st.empty()
@@ -1720,6 +1909,30 @@ class Exercise:
                 if self.are_hands_joined(landmark_list, stop=False):
                     st.warning("Stop gesture detected. Exiting bicep curl mode.")
                     break
+                
+                # Get current time
+                current_time = time.time()
+                
+                # Update rest timer display in the right column
+                self.display_rest_timer('bicep_curl', rest_timer_display, current_time)
+                
+                # Add set transition overlay if needed
+                if self.show_set_transition['bicep_curl']:
+                    img = self.draw_set_transition_overlay(img, 'bicep_curl', current_time)
+                
+                # Update fatigue display
+                fatigue_percent = int(self.fatigue_level * 100)
+                current_set = self.sets['bicep_curl'] + 1 if self.current_set_reps['bicep_curl'] > 0 else self.sets['bicep_curl']
+                
+                # Format the fatigue information
+                fatigue_info = f"""
+                **Fatigue Level:** {fatigue_percent}%
+                
+                **Current Set:** {current_set}
+                
+                **Total Reps:** {self.counters['bicep_curl']}
+                """
+                fatigue_display.markdown(fatigue_info)
                 
                 if show_debug:
                     # Override the count_repetition_bicep_curl function with custom thresholds
@@ -1767,6 +1980,14 @@ class Exercise:
                             
                             # Update the counter display
                             count_display.markdown(f"## {counter}")
+                            
+                            # Update the stats for this exercise
+                            if counter != self.counters['bicep_curl']:
+                                # We have a new rep, update the counter
+                                self.counters['bicep_curl'] = counter
+                                # Reset stages so the next rep starts fresh
+                                stage_right = None
+                                stage_left = None
                     
                     # Display threshold indicators on the screen
                     overlay = img.copy()
@@ -1789,6 +2010,26 @@ class Exercise:
                     
                     # Update counter display
                     count_display.markdown(f"## {counter}")
+                    
+                    # Update the stats for this exercise
+                    if counter != self.counters['bicep_curl']:
+                        # We have a new rep, update the counter
+                        self.counters['bicep_curl'] = counter
+                        # Reset stages so the next rep starts fresh
+                        stage_right = None
+                        stage_left = None
+                
+                # Process form feedback (if sufficient time has passed)
+                if current_time - self.last_feedback_time >= self.feedback_interval:
+                    form_feedback, self.prev_angles, significant_change = generate_feedback(
+                        detector, img, landmark_list, 'bicep_curl', stage_right, 
+                        self.feedback_history, self.prev_angles, self
+                    )
+                    
+                    # Only update feedback if there's significant change or it's been a while
+                    if significant_change or current_time - self.last_feedback_time > 10:
+                        self.form_feedback = form_feedback
+                        self.last_feedback_time = current_time
                 
                 # Add overlay with instructions at the bottom of the frame
                 h, w, _ = img.shape
@@ -1801,17 +2042,19 @@ class Exercise:
                 
                 # Display the frame
                 stframe.image(img_with_overlay, channels='BGR', use_column_width=True)
+                
+                # Update form feedback in a more appealing way
+                if len(self.form_feedback) > 0:
+                    st.markdown("### Form Feedback")
+                    for i, feedback in enumerate(self.form_feedback[:3]):  # Show top 3 feedback items
+                        st.markdown(f"- {feedback}")
             else:
                 # If no person detected
                 cv2.putText(img, "No person detected", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
                            1, (0, 0, 255), 2, cv2.LINE_AA)
                 stframe.image(img, channels='BGR', use_column_width=True)
-            
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
         
         cap.release()
-        cv2.destroyAllWindows()
         
         # Summary
         st.success(f"Bicep Curl session completed! Total repetitions: {counter}")
@@ -1823,6 +2066,9 @@ class Exercise:
             st.experimental_rerun()
 
     def exercise_method(self, cap, is_video, count_repetition_function, multi_stage=False, counter=0, stage=None, stage_right=None, stage_left=None):
+        # Create a placeholder for rest timer display
+        rest_timer_display = st.empty()
+        
         if is_video:
             stframe = st.empty()
             detector = pm.posture_detector()
@@ -1864,6 +2110,19 @@ class Exercise:
                                     self.prev_form_feedback = new_feedback
                                     self.last_feedback_time = current_time
                                     self.prev_angles = current_angles
+                                    
+                                # Also run fatigue detection
+                                fatigue_score, fatigue_warning = self.detect_fatigue(exercise_type, weight_factor=1.0)
+                                self.fatigue_level = fatigue_score
+                            
+                            # Update rest timer display in the sidebar instead of overlay
+                            if exercise_type:
+                                self.display_rest_timer(exercise_type, rest_timer_display, current_time)
+                                
+                            # Add set transition overlay if needed
+                            if exercise_type and self.show_set_transition[exercise_type]:
+                                img = self.draw_set_transition_overlay(img, exercise_type, current_time)
+                                
                             if multi_stage:
                                 stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
                             else:
@@ -1901,31 +2160,47 @@ class Exercise:
                         exercise_type = 'bicep_curl'
                     elif count_repetition_function.__name__ == 'count_repetition_shoulder_press':
                         exercise_type = 'shoulder_press'
+                    
                     if exercise_type and current_time - self.last_feedback_time >= self.feedback_interval:
                         stage_to_pass = stage if exercise_type in ['push_up', 'squat', 'shoulder_press'] else None
                         new_feedback, current_angles, significant_change = generate_feedback(
                             detector, img, landmark_list, exercise_type, stage_to_pass, self.feedback_history, self.prev_angles, self
                         )
+                        
                         if significant_change or new_feedback != self.prev_form_feedback:
                             self.form_feedback = new_feedback
                             self.prev_form_feedback = new_feedback
                             self.last_feedback_time = current_time
                             self.prev_angles = current_angles
-                        if multi_stage:
-                            stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
-                        else:
-                            stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
-                        if self.are_hands_joined(landmark_list, stop=False):
-                            break
+                            
+                        # Run fatigue detection
+                        fatigue_score, fatigue_warning = self.detect_fatigue(exercise_type, weight_factor=1.0)
+                        self.fatigue_level = fatigue_score
+                        if fatigue_warning:
+                            print(f"Fatigue warning: {fatigue_warning}")
+                    
+                    # Update rest timer display in the sidebar instead of overlay
+                    if exercise_type:
+                        self.display_rest_timer(exercise_type, rest_timer_display, current_time)
+                        
+                    # Add set transition overlay if needed
+                    if exercise_type and self.show_set_transition[exercise_type]:
+                        img = self.draw_set_transition_overlay(img, exercise_type, current_time)
+                        
+                    if multi_stage:
+                        stage_right, stage_left, counter = count_repetition_function(detector, img, landmark_list, stage_right, stage_left, counter, self)
+                    else:
+                        stage, counter = count_repetition_function(detector, img, landmark_list, stage, counter, self)
                 self.repetitions_counter(img, counter)
                 stframe.image(img, channels='BGR', use_container_width=True)
+                
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
-                    
-            # Only release the capture if we created it locally
+            
+            # Only release the VideoCapture if we created it in this method
             if cap_owned_locally:
                 cap.release()
-        cv2.destroyAllWindows()
+        return stage, counter
 
     def push_up_mode(self):
         """
@@ -1971,6 +2246,14 @@ class Exercise:
             st.markdown("### Current Count")
             count_display = st.markdown(f"## {counter}")
             
+            # Add fatigue and set information
+            st.markdown("### Stats")
+            fatigue_display = st.empty()
+            
+            # Add rest timer display
+            st.markdown("### Rest Timer")
+            rest_timer_display = st.empty()
+            
             if show_debug:
                 st.markdown("### Angle Debug")
                 angle_display = st.empty()
@@ -2005,110 +2288,74 @@ class Exercise:
                 self.visualize_angle(img, right_arm_angle, right_shoulder)
                 self.visualize_angle(img, left_arm_angle, left_shoulder)
                 
+                # Get current time
+                current_time = time.time()
+                
+                # Update rest timer display in the right column instead of overlay
+                self.display_rest_timer('push_up', rest_timer_display, current_time)
+                
+                # Add set transition overlay if needed
+                if self.show_set_transition['push_up']:
+                    img = self.draw_set_transition_overlay(img, 'push_up', current_time)
+                
                 if show_debug:
-                    # Draw angle guide
-                    h, w, _ = img.shape
-                    cv2.putText(img, f"Avg Angle: {int(avg_arm_angle)}° (R: {int(right_arm_angle)}°, L: {int(left_arm_angle)}°)", 
-                              (w-350, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                    # Display angle debug info
+                    angle_info = f"""
+                    Right Arm: {right_arm_angle:.1f}°
+                    Left Arm: {left_arm_angle:.1f}°
+                    Average: {avg_arm_angle:.1f}°
+                    """
+                    angle_display.markdown(angle_info)
                     
-                    # Update angle display
-                    angle_display.markdown(f"""
-                    - Right Arm: **{int(right_arm_angle)}°**
-                    - Left Arm: **{int(left_arm_angle)}°**
-                    - Average: **{int(avg_arm_angle)}°**
-                    - Stage: **{stage}**
-                    """)
-                    
-                    # Custom thresholds for push-up detection
-                    if avg_arm_angle < down_threshold:
-                        if stage != "down":
-                            print(f"Push-up DOWN detected: {avg_arm_angle}")
-                        stage = "down"
-                    
-                    if avg_arm_angle > up_threshold and stage == "down":
-                        stage = "up"
-                        counter += 1
-                        
-                        # Visual feedback
-                        cv2.putText(img, "REP COUNTED!", (int(img.shape[1]/2)-100, 60), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                        
-                        # Update the counter display
-                        count_display.markdown(f"## {counter}")
-                        
-                        # Log the rep for fatigue analysis
-                        current_time = time.time()
-                        self.log_rep_data('push_up', current_time, 
-                                         {'right_arm': right_arm_angle, 'left_arm': left_arm_angle})
-                    
-                    # Display threshold indicators
-                    overlay = img.copy()
-                    # Draw UP threshold
-                    cv2.rectangle(overlay, (10, 50), (30, 80), (0, 255, 0), -1)
-                    cv2.putText(overlay, f"UP: >{up_threshold}°", (35, 70), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
-                    
-                    # Draw DOWN threshold
-                    cv2.rectangle(overlay, (10, 90), (30, 120), (0, 0, 255), -1)
-                    cv2.putText(overlay, f"DOWN: <{down_threshold}°", (35, 110), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
-                    
-                    # Add the overlay with transparency
-                    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
-                else:
-                    # Call the standard repetition counter function
-                    stage, counter = count_repetition_push_up(
-                        detector, img, landmark_list, stage, counter, self)
-                    
-                    # Update counter display
-                    count_display.markdown(f"## {counter}")
+                # Update fatigue display
+                fatigue_percent = int(self.fatigue_level * 100)
+                current_set = self.sets['push_up'] + 1 if self.current_set_reps['push_up'] > 0 else self.sets['push_up']
                 
-                # Add body alignment guide
-                if len(landmark_list) >= 25:  # Ensure we have hip landmarks
-                    # Calculate body line (shoulder to hip)
-                    mid_shoulder = np.array([(landmark_list[11][1] + landmark_list[12][1])/2, 
-                                           (landmark_list[11][2] + landmark_list[12][2])/2])
-                    mid_hip = np.array([(landmark_list[23][1] + landmark_list[24][1])/2, 
-                                       (landmark_list[23][2] + landmark_list[24][2])/2])
+                # Format the fatigue information
+                fatigue_info = f"""
+                **Fatigue Level:** {fatigue_percent}%
+                
+                **Current Set:** {current_set}
+                
+                **Total Reps:** {self.counters['push_up']}
+                """
+                fatigue_display.markdown(fatigue_info)
+                
+                # Process form feedback (if sufficient time has passed)
+                if current_time - self.last_feedback_time >= self.feedback_interval:
+                    form_feedback, self.prev_angles, significant_change = generate_feedback(
+                        detector, img, landmark_list, 'push_up', stage, 
+                        self.feedback_history, self.prev_angles, self
+                    )
                     
-                    # Convert to pixel coordinates
-                    s_point = tuple(np.multiply(mid_shoulder, [640, 480]).astype(int))
-                    h_point = tuple(np.multiply(mid_hip, [640, 480]).astype(int))
-                    
-                    # Draw the body line
-                    cv2.line(img, s_point, h_point, (0, 255, 0), 2)
+                    # Only update feedback if there's significant change or it's been a while
+                    if significant_change or current_time - self.last_feedback_time > 10:
+                        self.form_feedback = form_feedback
+                        self.last_feedback_time = current_time
                 
-                # Add overlay with instructions
-                h, w, _ = img.shape
-                instruction_overlay = np.zeros((60, w, 3), dtype=np.uint8)
-                cv2.putText(instruction_overlay, "DOWN: Lower body | UP: Push up | JOIN HANDS: Exit", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                # Process push-up rep counting
+                stage, counter = count_repetition_push_up(detector, img, landmark_list, stage, counter, self)
+                count_display.markdown(f"## {counter}")
                 
-                # Add instruction overlay
-                img_with_overlay = np.vstack([img, instruction_overlay])
-                
-                # Display the frame
-                stframe.image(img_with_overlay, channels='BGR', use_column_width=True)
-            else:
-                # If no person detected
-                cv2.putText(img, "No person detected", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                           1, (0, 0, 255), 2, cv2.LINE_AA)
-                stframe.image(img, channels='BGR', use_column_width=True)
+                # Update the stats for this exercise
+                if counter != self.counters['push_up']:
+                    # We have a new rep, update the counter
+                    self.counters['push_up'] = counter
+                    # Reset the stage so the next rep starts fresh
+                    stage = None
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            # Display the frame with overlay
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            stframe.image(img, channels="RGB", use_column_width=True)
+            
+            # Update form feedback in a more appealing way
+            if len(self.form_feedback) > 0:
+                st.markdown("### Form Feedback")
+                for i, feedback in enumerate(self.form_feedback[:3]):  # Show top 3 feedback items
+                    st.markdown(f"- {feedback}")
         
+        # Close the camera
         cap.release()
-        cv2.destroyAllWindows()
-        
-        # Summary
-        st.success(f"Push-up session completed! Total repetitions: {counter}")
-        if counter > 0:
-            st.balloons()
-        
-        # Option to restart
-        if st.button("Start New Session"):
-            st.experimental_rerun()
 
     def squat_mode(self):
         """
@@ -2154,6 +2401,14 @@ class Exercise:
             st.markdown("### Current Count")
             count_display = st.markdown(f"## {counter}")
             
+            # Add fatigue and set information
+            st.markdown("### Stats")
+            fatigue_display = st.empty()
+            
+            # Add rest timer display
+            st.markdown("### Rest Timer")
+            rest_timer_display = st.empty()
+            
             if show_debug:
                 st.markdown("### Angle Debug")
                 angle_display = st.empty()
@@ -2183,113 +2438,73 @@ class Exercise:
                 right_knee = landmark_list[26][1:]
                 self.visualize_angle(img, right_leg_angle, right_knee)
                 
+                # Get current time
+                current_time = time.time()
+                
+                # Update rest timer display in the right column instead of overlay
+                self.display_rest_timer('squat', rest_timer_display, current_time)
+                
+                # Add set transition overlay if needed
+                if self.show_set_transition['squat']:
+                    img = self.draw_set_transition_overlay(img, 'squat', current_time)
+                
                 if show_debug:
-                    # Draw angle guide
-                    h, w, _ = img.shape
-                    cv2.putText(img, f"R Leg: {int(right_leg_angle)}° L Leg: {int(left_leg_angle)}°", 
-                              (w-300, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-                    
-                    # Update angle display
-                    angle_display.markdown(f"""
-                    - Right Leg: **{int(right_leg_angle)}°**
-                    - Left Leg: **{int(left_leg_angle)}°**
-                    - Stage: **{stage}**
-                    """)
-                    
-                    # Custom thresholds for squat detection
-                    if right_leg_angle > up_threshold and left_leg_angle < down_min:
-                        if stage != "down":
-                            print(f"Squat DOWN detected: R:{right_leg_angle} L:{left_leg_angle}")
-                        stage = "down"
-                    
-                    if right_leg_angle < up_threshold and left_leg_angle > 180 and stage == "down":
-                        stage = "up"
-                        counter += 1
-                        
-                        # Visual feedback
-                        cv2.putText(img, "REP COUNTED!", (int(img.shape[1]/2)-100, 60), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                        
-                        # Update the counter display
-                        count_display.markdown(f"## {counter}")
-                        
-                        # Log the rep for fatigue analysis
-                        current_time = time.time()
-                        self.log_rep_data('squat', current_time, 
-                                         {'right_leg': right_leg_angle, 'left_leg': left_leg_angle})
-                    
-                    # Display threshold indicators
-                    overlay = img.copy()
-                    # Draw DOWN range
-                    cv2.rectangle(overlay, (10, 50), (30, 80), (0, 255, 0), -1)
-                    cv2.putText(overlay, f"DOWN: >{up_threshold}°, <{down_min}°", (35, 70), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
-                    
-                    # Draw UP range
-                    cv2.rectangle(overlay, (10, 90), (30, 120), (0, 0, 255), -1)
-                    cv2.putText(overlay, f"UP: <{up_threshold}°, >180°", (35, 110), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
-                    
-                    # Add the overlay with transparency
-                    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
-                else:
-                    # Call the standard repetition counter function
-                    stage, counter = count_repetition_squat(
-                        detector, img, landmark_list, stage, counter, self)
-                    
-                    # Update counter display
-                    count_display.markdown(f"## {counter}")
+                    # Display angle debug info
+                    angle_info = f"""
+                    Right Leg: {right_leg_angle:.1f}°
+                    Left Leg: {left_leg_angle:.1f}°
+                    """
+                    angle_display.markdown(angle_info)
                 
-                # Visualize knee tracking (knees should align with toes)
-                if len(landmark_list) >= 32:  # Make sure we have ankle landmarks
-                    # Right leg visualization
-                    r_hip = tuple(np.multiply(landmark_list[24][1:], [640, 480]).astype(int))
-                    r_knee = tuple(np.multiply(landmark_list[26][1:], [640, 480]).astype(int))
-                    r_ankle = tuple(np.multiply(landmark_list[28][1:], [640, 480]).astype(int))
-                    
-                    # Draw lines connecting hip, knee, ankle
-                    cv2.line(img, r_hip, r_knee, (0, 255, 255), 2)
-                    cv2.line(img, r_knee, r_ankle, (0, 255, 255), 2)
-                    
-                    # Check knee tracking (knee should be above ankle)
-                    knee_x, knee_y = r_knee
-                    ankle_x, _ = r_ankle
-                    
-                    # Draw vertical line from ankle up for reference
-                    cv2.line(img, (ankle_x, r_knee[1]), r_knee, 
-                           (0, 255 if abs(knee_x - ankle_x) < 30 else 0, 0), 2)
+                # Update fatigue display
+                fatigue_percent = int(self.fatigue_level * 100)
+                current_set = self.sets['squat'] + 1 if self.current_set_reps['squat'] > 0 else self.sets['squat']
                 
-                # Add overlay with instructions
-                h, w, _ = img.shape
-                instruction_overlay = np.zeros((60, w, 3), dtype=np.uint8)
-                cv2.putText(instruction_overlay, "DOWN: Bend knees | UP: Stand up | JOIN HANDS: Exit", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                # Format the fatigue information
+                fatigue_info = f"""
+                **Fatigue Level:** {fatigue_percent}%
                 
-                # Add instruction overlay
-                img_with_overlay = np.vstack([img, instruction_overlay])
+                **Current Set:** {current_set}
                 
-                # Display the frame
-                stframe.image(img_with_overlay, channels='BGR', use_column_width=True)
-            else:
-                # If no person detected
-                cv2.putText(img, "No person detected", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                           1, (0, 0, 255), 2, cv2.LINE_AA)
-                stframe.image(img, channels='BGR', use_column_width=True)
+                **Total Reps:** {self.counters['squat']}
+                """
+                fatigue_display.markdown(fatigue_info)
+                
+                # Process form feedback (if sufficient time has passed)
+                if current_time - self.last_feedback_time >= self.feedback_interval:
+                    form_feedback, self.prev_angles, significant_change = generate_feedback(
+                        detector, img, landmark_list, 'squat', stage, 
+                        self.feedback_history, self.prev_angles, self
+                    )
+                    
+                    # Only update feedback if there's significant change or it's been a while
+                    if significant_change or current_time - self.last_feedback_time > 10:
+                        self.form_feedback = form_feedback
+                        self.last_feedback_time = current_time
+                
+                # Process squat rep counting
+                stage, counter = count_repetition_squat(detector, img, landmark_list, stage, counter, self)
+                count_display.markdown(f"## {counter}")
+                
+                # Update the stats for this exercise
+                if counter != self.counters['squat']:
+                    # We have a new rep, update the counter
+                    self.counters['squat'] = counter
+                    # Reset the stage so the next rep starts fresh
+                    stage = None
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            # Display the frame with overlay
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            stframe.image(img, channels="RGB", use_column_width=True)
+            
+            # Update form feedback in a more appealing way
+            if len(self.form_feedback) > 0:
+                st.markdown("### Form Feedback")
+                for i, feedback in enumerate(self.form_feedback[:3]):  # Show top 3 feedback items
+                    st.markdown(f"- {feedback}")
         
+        # Close the camera
         cap.release()
-        cv2.destroyAllWindows()
-        
-        # Summary
-        st.success(f"Squat session completed! Total repetitions: {counter}")
-        if counter > 0:
-            st.balloons()
-        
-        # Option to restart
-        if st.button("Start New Session"):
-            st.experimental_rerun()
 
     def shoulder_press_mode(self):
         """
@@ -2336,6 +2551,13 @@ class Exercise:
             st.markdown("### Current Count")
             count_display = st.markdown(f"## {counter}")
             
+            st.markdown("### Stats")
+            fatigue_display = st.empty()
+            
+            # Add rest timer display
+            st.markdown("### Rest Timer")
+            rest_timer_display = st.empty()
+            
             if show_debug:
                 st.markdown("### Angle Debug")
                 angle_display = st.empty()
@@ -2361,287 +2583,183 @@ class Exercise:
                 right_arm_angle = detector.find_angle(img, 12, 14, 16)
                 left_arm_angle = detector.find_angle(img, 11, 13, 15)
                 
-                # Visualize the right arm angle
+                # Visualize the angles
                 right_elbow = landmark_list[14][1:]
+                left_elbow = landmark_list[13][1:]
                 self.visualize_angle(img, right_arm_angle, right_elbow)
+                self.visualize_angle(img, left_arm_angle, left_elbow)
+                
+                # Get current time
+                current_time = time.time()
+                
+                # Update rest timer display in the right column instead of overlay
+                self.display_rest_timer('shoulder_press', rest_timer_display, current_time)
+                
+                # Add set transition overlay if needed
+                if self.show_set_transition['shoulder_press']:
+                    img = self.draw_set_transition_overlay(img, 'shoulder_press', current_time)
                 
                 if show_debug:
-                    # Draw angle guide
-                    h, w, _ = img.shape
-                    cv2.putText(img, f"R: {int(right_arm_angle)}°  L: {int(left_arm_angle)}°", 
-                              (w-200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-                    
-                    # Update angle display
-                    angle_display.markdown(f"""
-                    - Right Arm: **{int(right_arm_angle)}°**
-                    - Left Arm: **{int(left_arm_angle)}°**
-                    - Stage: **{stage}**
-                    """)
-                    
-                    # Custom thresholds for shoulder press detection
-                    if right_arm_angle > down_min and right_arm_angle < down_max and left_arm_angle < 100:
-                        if stage != "down":
-                            print(f"Shoulder press DOWN detected: R:{right_arm_angle} L:{left_arm_angle}")
-                        stage = "down"
-                    
-                    if right_arm_angle < up_threshold and left_arm_angle > 150 and stage == "down":
-                        stage = "up"
-                        counter += 1
-                        
-                        # Visual feedback
-                        cv2.putText(img, "REP COUNTED!", (int(img.shape[1]/2)-100, 60), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                        
-                        # Update the counter display
-                        count_display.markdown(f"## {counter}")
-                        
-                        # Log the rep for fatigue analysis
-                        current_time = time.time()
-                        self.log_rep_data('shoulder_press', current_time, 
-                                         {'right_arm': right_arm_angle, 'left_arm': left_arm_angle})
-                    
-                    # Display threshold indicators
-                    overlay = img.copy()
-                    # Draw DOWN range
-                    cv2.rectangle(overlay, (10, 50), (30, 80), (0, 255, 0), -1)
-                    cv2.putText(overlay, f"DOWN: {down_min}-{down_max}°", (35, 70), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
-                    
-                    # Draw UP range
-                    cv2.rectangle(overlay, (10, 90), (30, 120), (0, 0, 255), -1)
-                    cv2.putText(overlay, f"UP: <{up_threshold}°", (35, 110), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
-                    
-                    # Add the overlay with transparency
-                    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
-                else:
-                    # Call the standard repetition counter function
-                    stage, counter = count_repetition_shoulder_press(
-                        detector, img, landmark_list, stage, counter, self)
-                    
-                    # Update counter display
-                    count_display.markdown(f"## {counter}")
+                    # Display angle debug info
+                    angle_info = f"""
+                    Right Arm: {right_arm_angle:.1f}°
+                    Left Arm: {left_arm_angle:.1f}°
+                    """
+                    angle_display.markdown(angle_info)
                 
-                # Draw arm connections and highlight shoulder alignment
-                if len(landmark_list) >= 16:  # Make sure we have wrist landmarks
-                    # Right arm visualization
-                    r_shoulder = tuple(np.multiply(landmark_list[12][1:], [640, 480]).astype(int))
-                    r_elbow = tuple(np.multiply(landmark_list[14][1:], [640, 480]).astype(int))
-                    r_wrist = tuple(np.multiply(landmark_list[16][1:], [640, 480]).astype(int))
-                    
-                    # Left arm visualization
-                    l_shoulder = tuple(np.multiply(landmark_list[11][1:], [640, 480]).astype(int))
-                    l_elbow = tuple(np.multiply(landmark_list[13][1:], [640, 480]).astype(int))
-                    l_wrist = tuple(np.multiply(landmark_list[15][1:], [640, 480]).astype(int))
-                    
-                    # Draw lines connecting shoulder, elbow, wrist
-                    cv2.line(img, r_shoulder, r_elbow, (0, 255, 255), 2)
-                    cv2.line(img, r_elbow, r_wrist, (0, 255, 255), 2)
-                    cv2.line(img, l_shoulder, l_elbow, (0, 255, 255), 2)
-                    cv2.line(img, l_elbow, l_wrist, (0, 255, 255), 2)
-                    
-                    # Draw shoulder alignment line
-                    cv2.line(img, r_shoulder, l_shoulder, (0, 255, 0), 2)
+                # Update fatigue display
+                fatigue_percent = int(self.fatigue_level * 100)
+                current_set = self.sets['shoulder_press'] + 1 if self.current_set_reps['shoulder_press'] > 0 else self.sets['shoulder_press']
                 
-                # Add overlay with instructions
-                h, w, _ = img.shape
-                instruction_overlay = np.zeros((60, w, 3), dtype=np.uint8)
-                cv2.putText(instruction_overlay, "DOWN: Arms bent | UP: Press overhead | JOIN HANDS: Exit", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                # Format the fatigue information
+                fatigue_info = f"""
+                **Fatigue Level:** {fatigue_percent}%
                 
-                # Add instruction overlay
-                img_with_overlay = np.vstack([img, instruction_overlay])
+                **Current Set:** {current_set}
                 
-                # Display the frame
-                stframe.image(img_with_overlay, channels='BGR', use_column_width=True)
-            else:
-                # If no person detected
-                cv2.putText(img, "No person detected", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                           1, (0, 0, 255), 2, cv2.LINE_AA)
-                stframe.image(img, channels='BGR', use_column_width=True)
+                **Total Reps:** {self.counters['shoulder_press']}
+                """
+                fatigue_display.markdown(fatigue_info)
+                
+                # Process form feedback (if sufficient time has passed)
+                if current_time - self.last_feedback_time >= self.feedback_interval:
+                    form_feedback, self.prev_angles, significant_change = generate_feedback(
+                        detector, img, landmark_list, 'shoulder_press', stage, 
+                        self.feedback_history, self.prev_angles, self
+                    )
+                    
+                    # Only update feedback if there's significant change or it's been a while
+                    if significant_change or current_time - self.last_feedback_time > 10:
+                        self.form_feedback = form_feedback
+                        self.last_feedback_time = current_time
+                
+                # Process shoulder press rep counting
+                stage, counter = count_repetition_shoulder_press(detector, img, landmark_list, stage, counter, self)
+                count_display.markdown(f"## {counter}")
+                
+                # Update the stats for this exercise
+                if counter != self.counters['shoulder_press']:
+                    # We have a new rep, update the counter
+                    self.counters['shoulder_press'] = counter
+                    # Reset the stage so the next rep starts fresh
+                    stage = None
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            # Display the frame with overlay
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            stframe.image(img, channels="RGB", use_column_width=True)
+            
+            # Update form feedback in a more appealing way
+            if len(self.form_feedback) > 0:
+                st.markdown("### Form Feedback")
+                for i, feedback in enumerate(self.form_feedback[:3]):  # Show top 3 feedback items
+                    st.markdown(f"- {feedback}")
         
+        # Close the camera
         cap.release()
-        cv2.destroyAllWindows()
-        
-        # Summary
-        st.success(f"Shoulder Press session completed! Total repetitions: {counter}")
-        if counter > 0:
-            st.balloons()
-        
-        # Option to restart
-        if st.button("Start New Session"):
-            st.experimental_rerun()
-            
-    def bicep_curl_mode(self):
+
+    def draw_set_transition_overlay(self, img, exercise_type, current_time):
         """
-        A dedicated mode specifically for bicep curl detection and counting.
-        This provides enhanced visualization and real-time feedback.
+        Draws a set transition message when moving from one set to another.
         """
-        st.markdown("# Bicep Curl Training Mode")
-        st.markdown("Stand facing the camera with your arms visible. Start with arms extended, then curl up and down.")
+        if not self.show_set_transition[exercise_type]:
+            return img
         
-        # Advanced settings in sidebar
-        st.sidebar.markdown("### Settings")
-        show_debug = st.sidebar.checkbox("Show Debug Information", value=False)
+        # Check if we should still show the transition
+        time_elapsed = current_time - self.transition_start_time[exercise_type]
+        if time_elapsed > self.transition_duration:
+            self.show_set_transition[exercise_type] = False
+            return img
         
-        if show_debug:
-            st.sidebar.markdown("### Angle Thresholds")
-            down_min = st.sidebar.slider("Down Min Angle", 120, 160, 140, 5)
-            down_max = st.sidebar.slider("Down Max Angle", 170, 210, 190, 5)
-            up_threshold = st.sidebar.slider("Up Angle (< this or > 360-this)", 40, 100, 70, 5)
+        # Create overlay with transition message
+        h, w, _ = img.shape
         
-        # Set up camera
-        stframe = st.empty()
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            st.error("Error: Unable to open webcam. Please check your camera connection.")
-            return
+        # Determine opacity based on time (fade in/out effect)
+        if time_elapsed < 0.5:
+            # Fade in
+            alpha = time_elapsed / 0.5
+        elif time_elapsed > (self.transition_duration - 0.5):
+            # Fade out
+            alpha = (self.transition_duration - time_elapsed) / 0.5
+        else:
+            # Full opacity
+            alpha = 1.0
             
-        detector = pm.posture_detector()
-        counter = 0
-        stage_right = None 
-        stage_left = None
+        # Create a dark semi-transparent overlay for the entire image
+        overlay = img.copy()
+        cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5 * alpha, img, 1, 0, img)
         
-        # Instructions and visual guides
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown("### Instructions")
-            st.markdown("""
-            1. Stand with arms at your sides, palms facing forward
-            2. Curl both arms up while keeping elbows close to your body
-            3. Lower both arms back to the starting position
-            4. Repeat for desired number of repetitions
-            5. Join hands in prayer position to exit
-            """)
+        # Get current set
+        current_set = self.sets[exercise_type]
         
-        with col2:
-            st.markdown("### Current Count")
-            count_display = st.markdown(f"## {counter}")
+        # Add animated text in the center
+        # Make text size pulse for attention
+        pulse_factor = 1.0 + 0.2 * math.sin(time_elapsed * 4)
+        font_size = 1.5 * pulse_factor
+        
+        # Draw main message (e.g., "Set 2 Starting")
+        text = self.transition_message[exercise_type]
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, font_size, 2)[0]
+        text_x = (w - text_size[0]) // 2
+        text_y = (h - text_size[1]) // 2
+        
+        # Draw shadow/outline for better visibility
+        outline_color = (0, 0, 0)
+        for offset_x, offset_y in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
+            cv2.putText(img, text, (text_x + offset_x, text_y + offset_y), 
+                      cv2.FONT_HERSHEY_DUPLEX, font_size, outline_color, 2, cv2.LINE_AA)
+        
+        # Draw main text
+        cv2.putText(img, text, (text_x, text_y), 
+                  cv2.FONT_HERSHEY_DUPLEX, font_size, (255, 255, 255), 2, cv2.LINE_AA)
+        
+        # Add fatigue information
+        fatigue_percent = int(self.fatigue_level * 100)
+        fatigue_text = f"Fatigue Level: {fatigue_percent}%"
+        fatigue_size = cv2.getTextSize(fatigue_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
+        fatigue_x = (w - fatigue_size[0]) // 2
+        fatigue_y = text_y + text_size[1] + 40
+        
+        cv2.putText(img, fatigue_text, (fatigue_x, fatigue_y), 
+                  cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+        
+        # Show previous set info if available
+        if current_set > 0 and len(self.set_history[exercise_type]) > 0:
+            prev_reps = self.set_history[exercise_type][-1]
+            prev_set_text = f"Previous set: {prev_reps} reps"
+            prev_set_size = cv2.getTextSize(prev_set_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+            prev_set_x = (w - prev_set_size[0]) // 2
+            prev_set_y = fatigue_y + 40
             
-            if show_debug:
-                st.markdown("### Angle Debug")
-                angle_display = st.empty()
+            cv2.putText(img, prev_set_text, (prev_set_x, prev_set_y), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
         
-        # Capture and process frames
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                st.error("Failed to capture frame from camera")
-                break
-                
-            # Process frame to detect person and landmarks
-            img = detector.find_person(frame)
-            landmark_list = detector.find_landmarks(img, draw=True)
+        return img
+
+    # Define a helper method for displaying rest timer at the top of the Exercise class
+    def display_rest_timer(self, exercise_type, rest_timer_display, current_time):
+        """
+        Display a properly formatted rest timer in a Streamlit container
+        """
+        if self.show_rest_timer[exercise_type]:
+            rest_elapsed = current_time - self.rest_timer_start[exercise_type]
+            time_until_new_set = max(0, self.set_pause_threshold - rest_elapsed)
+            progress_percent = min(100, int((rest_elapsed / self.set_pause_threshold) * 100))
             
-            if len(landmark_list) > 0:
-                # Check for stop gesture
-                if self.are_hands_joined(landmark_list, stop=False):
-                    st.warning("Stop gesture detected. Exiting bicep curl mode.")
-                    break
-                
-                if show_debug:
-                    # Override the count_repetition_bicep_curl function with custom thresholds
-                    right_arm_angle = detector.find_angle(img, 12, 14, 16)
-                    left_arm_angle = detector.find_angle(img, 11, 13, 15)
-                    
-                    # Draw angle guide
-                    h, w, _ = img.shape
-                    cv2.putText(img, f"R: {int(right_arm_angle)}°  L: {int(left_arm_angle)}°", 
-                              (w-200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-                    
-                    # Update angle display
-                    angle_display.markdown(f"""
-                    - Right Arm: **{int(right_arm_angle)}°**
-                    - Left Arm: **{int(left_arm_angle)}°**
-                    - Right Stage: **{stage_right}**
-                    - Left Stage: **{stage_left}**
-                    """)
-                    
-                    # Check for DOWN position with custom thresholds
-                    if right_arm_angle > down_min and right_arm_angle < down_max:
-                        if stage_right != "down":
-                            print(f"Right arm DOWN: {right_arm_angle:.1f}")
-                        stage_right = "down"
-                    
-                    if left_arm_angle > down_min and left_arm_angle < down_max:
-                        if stage_left != "down":
-                            print(f"Left arm DOWN: {left_arm_angle:.1f}")
-                        stage_left = "down"
-                    
-                    # Check for UP position
-                    if stage_right == "down" and stage_left == "down":
-                        # Both arms must be in UP position to count a rep
-                        up_condition_right = (right_arm_angle < up_threshold) or (right_arm_angle > (360 - up_threshold))
-                        up_condition_left = (left_arm_angle < up_threshold) or (left_arm_angle > (360 - up_threshold))
-                        
-                        if up_condition_right and up_condition_left:
-                            stage_right = "up"
-                            stage_left = "up"
-                            counter += 1
-                            
-                            # Visual feedback
-                            cv2.putText(img, "REP COUNTED!", (int(img.shape[1]/2)-100, 60), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                            
-                            # Update the counter display
-                            count_display.markdown(f"## {counter}")
-                    
-                    # Display threshold indicators on the screen
-                    overlay = img.copy()
-                    # Draw DOWN range indicator
-                    cv2.rectangle(overlay, (10, 50), (30, 80), (0, 255, 0), -1)
-                    cv2.putText(overlay, f"DOWN: {down_min}-{down_max}°", (35, 70), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
-                    
-                    # Draw UP range indicator
-                    cv2.rectangle(overlay, (10, 90), (30, 120), (0, 0, 255), -1)
-                    cv2.putText(overlay, f"UP: <{up_threshold}° or >{360-up_threshold}°", (35, 110), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
-                    
-                    # Add the overlay with transparency
-                    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
-                else:
-                    # Call the standard repetition counter function
-                    stage_right, stage_left, counter = count_repetition_bicep_curl(
-                        detector, img, landmark_list, stage_right, stage_left, counter, self)
-                    
-                    # Update counter display
-                    count_display.markdown(f"## {counter}")
-                
-                # Add overlay with instructions at the bottom of the frame
-                h, w, _ = img.shape
-                instruction_overlay = np.zeros((60, w, 3), dtype=np.uint8)
-                cv2.putText(instruction_overlay, "DOWN: Extend arms | UP: Curl arms | JOIN HANDS: Exit", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                
-                # Add instruction overlay to bottom of frame
-                img_with_overlay = np.vstack([img, instruction_overlay])
-                
-                # Display the frame
-                stframe.image(img_with_overlay, channels='BGR', use_column_width=True)
-            else:
-                # If no person detected
-                cv2.putText(img, "No person detected", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                           1, (0, 0, 255), 2, cv2.LINE_AA)
-                stframe.image(img, channels='BGR', use_column_width=True)
+            # Create a styled rest timer display
+            rest_timer_display.markdown(f"**REST PERIOD** - {int(rest_elapsed)}s elapsed")
+            rest_timer_display.markdown(f"⏱️ **New set in: {int(time_until_new_set)}s**")
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        
-        cap.release()
-        cv2.destroyAllWindows()
-        
-        # Summary
-        st.success(f"Bicep Curl session completed! Total repetitions: {counter}")
-        if counter > 0:
-            st.balloons()
-        
-        # Option to restart
-        if st.button("Start New Session"):
-            st.experimental_rerun()
+            # Create a progress bar
+            progress_bar_html = f"""
+            <div style="width:100%; background-color:#e0e0e0; height:10px; border-radius:5px; margin:10px 0;">
+                <div style="width:{progress_percent}%; background-color:{'#ff9d00' if progress_percent > 80 else '#2196F3'}; height:10px; border-radius:5px;"></div>
+            </div>
+            <p style="text-align:center; font-size:0.8em;">{progress_percent}% complete</p>
+            """
+            rest_timer_display.markdown(progress_bar_html, unsafe_allow_html=True)
+        else:
+            rest_timer_display.markdown("*No rest period active*")
 
 if __name__ == "__main__":
     exercise = Exercise()
